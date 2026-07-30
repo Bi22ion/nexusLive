@@ -13,6 +13,7 @@
     "install:all": "npm install && npm install --prefix web && npm install --prefix server && npm install --prefix worker"
   },
   "devDependencies": {
-    "concurrently": "^9.1.2"
+    "concurrently": "^9.1.2",
+    "eslint": "^10.8.0"
   }
 }
