@@ -1,5 +1,4 @@
 import { redirect } from "next/navigation";
-import { Shell } from "@/components/Shell";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 type Profile = {
@@ -25,9 +24,6 @@ export default async function AgencyDashboardPage() {
     redirect("/");
   }
 
-  // Commission earned: sum 10% fee entries for orgs owned by agency.
-  // Assumes you have `transactions.agency_fee` and `orgs.owner_id`.
-  // If your schema differs, adjust queries accordingly.
   const { data: orgs } = await supabase
     .from("orgs")
     .select("id,name")
@@ -47,7 +43,6 @@ export default async function AgencyDashboardPage() {
     0
   );
 
-  // Managed hosts: org_members + their profile and live status placeholder.
   const { data: members } = orgIds.length
     ? await supabase
         .from("org_members")
@@ -56,76 +51,77 @@ export default async function AgencyDashboardPage() {
     : { data: [] as any[] };
 
   return (
-    <Shell>
-      <main className="mx-auto w-full max-w-6xl px-4 py-6 sm:py-10 space-y-6">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight">
-            Agency Dashboard
-          </h1>
-          <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-            Welcome{p.username ? `, ${p.username}` : ""}. Track commissions and host activity.
-          </p>
-        </div>
+    <main className="mx-auto w-full max-w-5xl space-y-6">
+      <div>
+        <h1 className="text-xl font-bold uppercase tracking-tight text-white sm:text-2xl">
+          Agency Dashboard
+        </h1>
+        <p className="mt-1 text-xs text-neutral-500">
+          Welcome{p.username ? `, ${p.username}` : ""}. Track commissions and host activity.
+        </p>
+      </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <Card title="Total commission earned">
-            <div className="text-3xl font-semibold tabular-nums">
-              {totalCommission.toLocaleString()}
-            </div>
-            <div className="mt-1 text-xs text-zinc-600 dark:text-zinc-400">
-              Sum of `transactions.agency_fee` for your orgs.
-            </div>
-          </Card>
-          <Card title="Managed orgs">
-            <div className="text-3xl font-semibold tabular-nums">
-              {(orgs ?? []).length}
-            </div>
-            <div className="mt-1 text-xs text-zinc-600 dark:text-zinc-400">
-              Guilds/studios owned by this account.
-            </div>
-          </Card>
-          <Card title="Team PK invitations">
-            <div className="text-sm text-zinc-600 dark:text-zinc-400">
-              Placeholder logic: invitation system coming next.
-            </div>
-            <button className="mt-3 rounded-xl bg-gradient-to-r from-violet-500 to-cyan-400 px-4 py-2 text-sm font-semibold text-white">
-              Create Invitation (placeholder)
-            </button>
-          </Card>
-        </div>
-
-        <Card title="Managed hosts">
-          <div className="mt-2 divide-y divide-black/5 dark:divide-white/10">
-            {(members ?? []).length ? (
-              (members ?? []).map((m: any) => (
-                <div key={`${m.org_id}:${m.user_id}`} className="py-3 flex items-center justify-between gap-4">
-                  <div className="min-w-0">
-                    <div className="font-semibold truncate">
-                      {m.profiles?.username ?? m.user_id}
-                    </div>
-                    <div className="text-xs text-zinc-600 dark:text-zinc-400">
-                      Org: {(orgs ?? []).find((o: any) => o.id === m.org_id)?.name ?? m.org_id}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="rounded-full border border-black/10 dark:border-white/10 px-2 py-1 text-xs">
-                      Live status: TBD
-                    </span>
-                    <button className="rounded-full border border-black/10 dark:border-white/10 px-3 py-1.5 text-xs hover:bg-black/[0.03] dark:hover:bg-white/[0.06]">
-                      Invite to Team PK
-                    </button>
-                  </div>
-                </div>
-              ))
-            ) : (
-              <div className="py-6 text-sm text-zinc-600 dark:text-zinc-400">
-                No hosts found under your orgs yet.
-              </div>
-            )}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <Card title="Total commission earned">
+          <div className="text-2xl font-bold tabular-nums text-white">
+            {totalCommission.toLocaleString()}
+          </div>
+          <div className="mt-1 text-[11px] text-neutral-500">
+            Sum of agency fees for your orgs
           </div>
         </Card>
-      </main>
-    </Shell>
+        <Card title="Managed orgs">
+          <div className="text-2xl font-bold tabular-nums text-white">
+            {(orgs ?? []).length}
+          </div>
+          <div className="mt-1 text-[11px] text-neutral-500">
+            Studios owned by this account
+          </div>
+        </Card>
+        <Card title="Team PK invitations">
+          <div className="text-[11px] text-neutral-500">
+            Invitation system coming soon
+          </div>
+          <button className="mt-3 rounded-lg bg-gradient-to-r from-violet-600 to-cyan-500 px-4 py-2 text-xs font-semibold text-white transition-opacity hover:opacity-90">
+            Create Invitation
+          </button>
+        </Card>
+      </div>
+
+      <Card title="Managed hosts">
+        <div className="divide-y divide-white/[0.04]">
+          {(members ?? []).length ? (
+            (members ?? []).map((m: any) => (
+              <div
+                key={`${m.org_id}:${m.user_id}`}
+                className="flex items-center justify-between gap-4 py-3"
+              >
+                <div className="min-w-0">
+                  <div className="truncate text-sm font-semibold text-white">
+                    {m.profiles?.username ?? m.user_id}
+                  </div>
+                  <div className="text-[11px] text-neutral-500">
+                    Org: {(orgs ?? []).find((o: any) => o.id === m.org_id)?.name ?? m.org_id}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="rounded-full border border-white/[0.06] px-2 py-1 text-[11px] text-neutral-400">
+                    Live status: TBD
+                  </span>
+                  <button className="rounded-full border border-white/[0.06] px-3 py-1.5 text-[11px] text-neutral-300 transition-colors hover:bg-white/[0.06]">
+                    Invite to Team PK
+                  </button>
+                </div>
+              </div>
+            ))
+          ) : (
+            <div className="py-6 text-sm text-neutral-500">
+              No hosts found under your orgs yet.
+            </div>
+          )}
+        </div>
+      </Card>
+    </main>
   );
 }
 
@@ -137,12 +133,11 @@ function Card({
   children: React.ReactNode;
 }) {
   return (
-    <section className="rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-black/30 backdrop-blur p-4 sm:p-5">
-      <div className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
+    <section className="rounded-2xl border border-white/[0.06] bg-neutral-900/40 p-4 sm:p-5">
+      <div className="text-[11px] font-medium uppercase tracking-wider text-neutral-500">
         {title}
       </div>
       <div className="mt-2">{children}</div>
     </section>
   );
 }
-

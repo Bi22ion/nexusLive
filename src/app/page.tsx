@@ -1,23 +1,46 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { FeaturedPkBattles } from "@/components/market/FeaturedPkBattles";
 import { StreamGrid } from "@/components/market/StreamGrid";
 import { subscribeWithRetry } from "@/lib/realtime/subscribeWithRetry";
-import { Loader2 } from "lucide-react";
+import { Loader2, X } from "lucide-react";
 
 interface HomeProps {
-  searchParams: Promise<{ category?: string }>;
+  searchParams: Promise<{
+    category?: string;
+    filter?: string;
+    value?: string;
+  }>;
 }
 
 const CATEGORY_TABS = ["All", "Solo", "Couple", "BDSM", "VR Cams"] as const;
 
+function mapAgeToRange(value: string): [number, number] | null {
+  const v = value.toLowerCase();
+  if (v.includes("18")) return [18, 21];
+  if (v.includes("22") || v.includes("young")) return [22, 29];
+  if (v.includes("milf") || v.includes("mature")) return [30, 99];
+  return null;
+}
+
 export default function Home({ searchParams }: HomeProps) {
   const [category, setCategory] = React.useState<string | undefined>();
+  const [filter, setFilter] = React.useState<string | undefined>();
+  const [filterValue, setFilterValue] = React.useState<string | undefined>();
   const [liveStreams, setLiveStreams] = React.useState<any[]>([]);
   const [loading, setLoading] = React.useState(true);
   const supabase = React.useMemo(() => createSupabaseBrowserClient(), []);
+
+  React.useEffect(() => {
+    searchParams.then((params) => {
+      setCategory(params.category);
+      setFilter(params.filter);
+      setFilterValue(params.value);
+    });
+  }, [searchParams]);
 
   const fetchLiveStreams = React.useCallback(async () => {
     if (!supabase) return;
@@ -27,7 +50,7 @@ export default function Home({ searchParams }: HomeProps) {
       .select(`
         *,
         host_profile:profiles!program_schedule_host_fkey(
-          id, username, avatar_url, display_name
+          id, username, avatar_url, display_name, age, ethnicity, body_type, tags
         )
       `)
       .eq("status", "live")
@@ -58,10 +81,6 @@ export default function Home({ searchParams }: HomeProps) {
   }, [category, supabase]);
 
   React.useEffect(() => {
-    searchParams.then((params) => setCategory(params.category));
-  }, [searchParams]);
-
-  React.useEffect(() => {
     fetchLiveStreams();
   }, [fetchLiveStreams]);
 
@@ -85,8 +104,47 @@ export default function Home({ searchParams }: HomeProps) {
     };
   }, [fetchLiveStreams, supabase]);
 
-  const pkStreams = liveStreams?.filter((s) => s.is_pk === true) || [];
-  const soloStreams = liveStreams?.filter((s) => s.is_pk !== true) || [];
+  const applyClientFilter = (stream: any): boolean => {
+    if (!filter || !filterValue) return true;
+    const profile = stream.host_profile && !Array.isArray(stream.host_profile)
+      ? stream.host_profile
+      : Array.isArray(stream.host_profile)
+        ? stream.host_profile[0]
+        : null;
+
+    const v = filterValue.toLowerCase();
+
+    if (filter === "Age") {
+      const range = mapAgeToRange(filterValue);
+      if (range && profile?.age != null) {
+        const age = Number(profile.age);
+        return age >= range[0] && age <= range[1];
+      }
+      return true;
+    }
+
+    if (filter === "Ethnicity") {
+      const eth = (profile?.ethnicity ?? "").toLowerCase();
+      return eth.includes(v);
+    }
+
+    if (filter === "Body Type") {
+      const bt = (profile?.body_type ?? "").toLowerCase();
+      return bt.includes(v);
+    }
+
+    if (filter === "Tags") {
+      const tags = Array.isArray(profile?.tags) ? profile.tags : [];
+      return tags.some((t: string) => t.toLowerCase().includes(v));
+    }
+
+    return true;
+  };
+
+  const filteredStreams = liveStreams.filter(applyClientFilter);
+
+  const pkStreams = filteredStreams.filter((s) => s.is_pk === true) || [];
+  const soloStreams = filteredStreams.filter((s) => s.is_pk !== true) || [];
 
   if (loading) {
     return (
@@ -101,6 +159,22 @@ export default function Home({ searchParams }: HomeProps) {
 
   return (
     <div className="space-y-8 pb-16">
+      {filter && filterValue && (
+        <div className="flex items-center gap-3 rounded-xl border border-red-500/20 bg-red-500/5 px-4 py-2.5">
+          <span className="text-xs uppercase tracking-wider text-neutral-500">
+            {filter}
+          </span>
+          <span className="text-sm font-bold text-white">{filterValue}</span>
+          <Link
+            href="/"
+            className="ml-auto inline-flex items-center gap-1 rounded-full bg-white/5 px-3 py-1 text-[11px] font-semibold text-neutral-300 transition-colors hover:bg-white/10 hover:text-white"
+          >
+            <X className="h-3 w-3" />
+            Clear
+          </Link>
+        </div>
+      )}
+
       {pkStreams.length > 0 && (
         <section>
           <div className="mb-3 flex items-center gap-2">
@@ -117,19 +191,24 @@ export default function Home({ searchParams }: HomeProps) {
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <h1 className="text-lg font-bold uppercase tracking-tight text-white">
-              Recommended For You
+              {filter && filterValue ? filterValue : "Recommended For You"}
             </h1>
-            <p className="mt-0.5 text-xs text-neutral-500">Real-time feeds from active creators</p>
+            <p className="mt-0.5 text-xs text-neutral-500">
+              Real-time feeds from active creators
+            </p>
           </div>
 
           <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
             {CATEGORY_TABS.map((tab) => {
               const cat = tab.toLowerCase();
               const isActive = !category || category === cat || (category === "all" && tab === "All");
+              const href = tab === "All"
+                ? (filter && filterValue ? `/?filter=${encodeURIComponent(filter)}&value=${encodeURIComponent(filterValue)}` : "/")
+                : `?category=${cat}${filter && filterValue ? `&filter=${encodeURIComponent(filter)}&value=${encodeURIComponent(filterValue)}` : ""}`;
               return (
                 <a
                   key={tab}
-                  href={tab === "All" ? "/" : `?category=${cat}`}
+                  href={href}
                   className={`whitespace-nowrap rounded-full border px-3.5 py-1.5 text-[11px] font-bold uppercase tracking-wider transition-all ${
                     isActive
                       ? "border-red-500/40 bg-red-500/10 text-red-400"
@@ -151,16 +230,18 @@ export default function Home({ searchParams }: HomeProps) {
               <span className="h-2 w-2 animate-pulse rounded-full bg-neutral-600" />
             </div>
             <p className="text-sm font-bold uppercase tracking-widest text-neutral-500">
-              No live rooms active
+              {filter && filterValue ? "No matching streams for this filter" : "No live rooms active"}
             </p>
             <p className="mt-1 text-xs text-neutral-600">
-              Start a broadcast in the Studio to be the first on the list
+              {filter && filterValue
+                ? "Try a different filter or clear it to see all live streams"
+                : "Start a broadcast in the Studio to be the first on the list"}
             </p>
           </div>
         )}
       </section>
 
-      {soloStreams.length > 0 && (
+      {soloStreams.length > 0 && !filter && (
         <section>
           <div className="mb-3 flex items-center gap-2">
             <span className="h-4 w-1 rounded-full bg-violet-500" />
