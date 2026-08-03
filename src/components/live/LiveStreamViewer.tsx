@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { Loader2, WifiOff } from "lucide-react";
 
 type LiveStreamViewerProps = {
   streamId: string;
@@ -9,106 +10,234 @@ type LiveStreamViewerProps = {
   className?: string;
 };
 
+type ConnState = "connecting" | "live" | "reconnecting" | "offline";
+
 export function LiveStreamViewer({ streamId, hostId, className = "" }: LiveStreamViewerProps) {
   const supabase = React.useMemo(() => createSupabaseBrowserClient(), []);
   const videoRef = React.useRef<HTMLVideoElement>(null);
   const pcRef = React.useRef<RTCPeerConnection | null>(null);
-  const viewerIdRef = React.useRef<string>(crypto.randomUUID());
-  const [status, setStatus] = React.useState<"connecting" | "live" | "failed">("connecting");
-  const statusRef = React.useRef<"connecting" | "live" | "failed">("connecting");
+  const viewerIdRef = React.useRef<string>(
+    typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : Math.random().toString(36).slice(2)
+  );
+  const [status, setStatus] = React.useState<ConnState>("connecting");
+  const statusRef = React.useRef<ConnState>("connecting");
+  const reconnectAttemptsRef = React.useRef(0);
+  const activeRef = React.useRef(true);
+
+  const updateStatus = React.useCallback((next: ConnState) => {
+    if (!activeRef.current) return;
+    statusRef.current = next;
+    setStatus(next);
+  }, []);
 
   React.useEffect(() => {
     if (!supabase) {
-      setStatus("failed");
+      updateStatus("offline");
       return;
     }
-    setStatus("connecting");
-    statusRef.current = "connecting";
 
-    let active = true;
+    activeRef.current = true;
+    updateStatus("connecting");
+
     const viewerId = viewerIdRef.current;
-    const channel = supabase.channel(`webrtc:stream-${streamId}`);
-    const pc = new RTCPeerConnection({
-      iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
-    });
-    pcRef.current = pc;
+    let channel = supabase.channel(`webrtc:stream-${streamId}`);
+    let iceRetryTimer: ReturnType<typeof setTimeout> | null = null;
+    let initialTimeout: ReturnType<typeof setTimeout> | null = null;
+    let renegotiateTimer: ReturnType<typeof setTimeout> | null = null;
 
-    pc.ontrack = (event) => {
-      if (!active || !videoRef.current) return;
-      videoRef.current.srcObject = event.streams[0];
-      setStatus("live");
-      statusRef.current = "live";
-    };
-
-    pc.onicecandidate = async (event) => {
-      if (!event.candidate) return;
-      await channel.send({
-        type: "broadcast",
-        event: "viewer_candidate",
-        payload: {
-          viewerId,
-          targetHostId: hostId,
-          candidate: event.candidate.toJSON(),
-        },
+    const buildPeerConnection = () => {
+      const pc = new RTCPeerConnection({
+        iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
       });
+      pcRef.current = pc;
+
+      pc.ontrack = (event) => {
+        if (!activeRef.current || !videoRef.current) return;
+        videoRef.current.srcObject = event.streams[0];
+        updateStatus("live");
+        reconnectAttemptsRef.current = 0;
+      };
+
+      pc.oniceconnectionstatechange = () => {
+        if (!activeRef.current) return;
+        const state = pc.iceConnectionState;
+        if (state === "disconnected" || state === "failed") {
+          updateStatus("reconnecting");
+          if (iceRetryTimer) clearTimeout(iceRetryTimer);
+          iceRetryTimer = setTimeout(() => {
+            if (!activeRef.current) return;
+            try {
+              pc.restartIce();
+            } catch {
+              /* best-effort restart */
+            }
+          }, 1500);
+        } else if (state === "connected" || state === "completed") {
+          if (videoRef.current?.srcObject) {
+            updateStatus("live");
+          }
+        }
+      };
+
+      pc.onicecandidate = async (event) => {
+        if (!event.candidate) return;
+        try {
+          await channel.send({
+            type: "broadcast",
+            event: "viewer_candidate",
+            payload: {
+              viewerId,
+              targetHostId: hostId,
+              candidate: event.candidate.toJSON(),
+            },
+          });
+        } catch {
+          /* transient send failure — ignore */
+        }
+      };
+
+      return pc;
     };
+
+    const pc = buildPeerConnection();
 
     channel
       .on("broadcast", { event: "host_offer" }, async ({ payload }) => {
         if (payload?.targetViewerId !== viewerId || !payload?.sdp || !payload?.type) return;
-        await pc.setRemoteDescription(new RTCSessionDescription({ type: payload.type, sdp: payload.sdp }));
-        const answer = await pc.createAnswer();
-        await pc.setLocalDescription(answer);
-        await channel.send({
-          type: "broadcast",
-          event: "viewer_answer",
-          payload: {
-            viewerId,
-            targetHostId: hostId,
-            sdp: answer.sdp,
-            type: answer.type,
-          },
-        });
+        try {
+          await pc.setRemoteDescription(new RTCSessionDescription({ type: payload.type, sdp: payload.sdp }));
+          const answer = await pc.createAnswer();
+          await pc.setLocalDescription(answer);
+          await channel.send({
+            type: "broadcast",
+            event: "viewer_answer",
+            payload: { viewerId, targetHostId: hostId, sdp: answer.sdp, type: answer.type },
+          });
+        } catch {
+          /* malformed offer — wait for the next one */
+        }
       })
       .on("broadcast", { event: "host_candidate" }, async ({ payload }) => {
         if (payload?.targetViewerId !== viewerId || !payload?.candidate) return;
-        await pc.addIceCandidate(new RTCIceCandidate(payload.candidate));
+        try {
+          await pc.addIceCandidate(new RTCIceCandidate(payload.candidate));
+        } catch {
+          /* candidate arrived before remote description — safe to drop */
+        }
       })
       .subscribe(async (state) => {
+        if (!activeRef.current) return;
         if (state === "SUBSCRIBED") {
-          await channel.send({
-            type: "broadcast",
-            event: "viewer_join",
-            payload: { viewerId, streamId },
-          });
+          try {
+            await channel.send({
+              type: "broadcast",
+              event: "viewer_join",
+              payload: { viewerId, streamId },
+            });
+          } catch {
+            /* best-effort */
+          }
+        } else if (state === "CHANNEL_ERROR" || state === "TIMED_OUT" || state === "CLOSED") {
+          if (reconnectAttemptsRef.current < 3) {
+            reconnectAttemptsRef.current += 1;
+            updateStatus("reconnecting");
+            setTimeout(() => {
+              if (!activeRef.current) return;
+              channel.unsubscribe();
+              supabase.removeChannel(channel);
+              channel = supabase.channel(`webrtc:stream-${streamId}-${reconnectAttemptsRef.current}`);
+              channel
+                .on("broadcast", { event: "host_offer" }, async ({ payload }) => {
+                  if (payload?.targetViewerId !== viewerId || !payload?.sdp || !payload?.type) return;
+                  try {
+                    await pc.setRemoteDescription(new RTCSessionDescription({ type: payload.type, sdp: payload.sdp }));
+                    const answer = await pc.createAnswer();
+                    await pc.setLocalDescription(answer);
+                    await channel.send({
+                      type: "broadcast",
+                      event: "viewer_answer",
+                      payload: { viewerId, targetHostId: hostId, sdp: answer.sdp, type: answer.type },
+                    });
+                  } catch {
+                    /* ignore */
+                  }
+                })
+                .on("broadcast", { event: "host_candidate" }, async ({ payload }) => {
+                  if (payload?.targetViewerId !== viewerId || !payload?.candidate) return;
+                  try {
+                    await pc.addIceCandidate(new RTCIceCandidate(payload.candidate));
+                  } catch {
+                    /* ignore */
+                  }
+                })
+                .subscribe(async (s) => {
+                  if (s === "SUBSCRIBED") {
+                    try {
+                      await channel.send({ type: "broadcast", event: "viewer_join", payload: { viewerId, streamId } });
+                    } catch {
+                      /* best-effort */
+                    }
+                  }
+                });
+            }, 2500 * reconnectAttemptsRef.current);
+          } else {
+            updateStatus("offline");
+          }
         }
       });
 
-    const timeout = setTimeout(() => {
-      if (active && statusRef.current !== "live") {
-        setStatus("failed");
-        statusRef.current = "failed";
+    initialTimeout = setTimeout(() => {
+      if (activeRef.current && statusRef.current === "connecting") {
+        updateStatus("reconnecting");
       }
-    }, 12000);
+    }, 8000);
 
     return () => {
-      active = false;
-      clearTimeout(timeout);
-      pc.close();
+      activeRef.current = false;
+      if (initialTimeout) clearTimeout(initialTimeout);
+      if (iceRetryTimer) clearTimeout(iceRetryTimer);
+      if (renegotiateTimer) clearTimeout(renegotiateTimer);
+      try {
+        pc.close();
+      } catch {
+        /* already closed */
+      }
       pcRef.current = null;
       channel.unsubscribe();
       supabase.removeChannel(channel);
     };
-  }, [hostId, streamId, supabase]);
+  }, [hostId, streamId, supabase, updateStatus]);
 
   return (
-    <div className={`relative h-full w-full ${className}`}>
-      <video ref={videoRef} className="h-full w-full object-cover" autoPlay playsInline controls muted />
-      {status !== "live" ? (
-        <div className="absolute inset-0 flex items-center justify-center bg-black/60 text-sm text-neutral-300">
-          {status === "connecting" ? "Connecting to live camera..." : "Live feed unavailable right now."}
+    <div className={`relative h-full w-full bg-black ${className}`}>
+      <video
+        ref={videoRef}
+        className="h-full w-full object-cover"
+        autoPlay
+        playsInline
+        muted
+      />
+
+      {status === "connecting" && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/70 text-neutral-300">
+          <Loader2 className="h-7 w-7 animate-spin text-neutral-400" />
+          <span className="text-xs uppercase tracking-[0.2em] text-neutral-500">Connecting to live feed</span>
         </div>
-      ) : null}
+      )}
+
+      {status === "reconnecting" && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/60 text-neutral-300">
+          <Loader2 className="h-6 w-6 animate-spin text-amber-400" />
+          <span className="text-xs uppercase tracking-[0.2em] text-amber-400/80">Reconnecting…</span>
+        </div>
+      )}
+
+      {status === "offline" && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/80 text-neutral-400">
+          <WifiOff className="h-7 w-7 text-neutral-600" />
+          <span className="text-xs uppercase tracking-[0.2em] text-neutral-500">Stream offline</span>
+        </div>
+      )}
     </div>
   );
 }

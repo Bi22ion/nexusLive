@@ -28,6 +28,7 @@ export function StreamCard({ model }: { model: StreamCardModel }) {
   const [mounted, setMounted] = React.useState(false);
   const [isFollowing, setIsFollowing] = React.useState(false);
   const [showLiveModal, setShowLiveModal] = React.useState(false);
+  const [followBusy, setFollowBusy] = React.useState(false);
   const supabase = React.useMemo(() => createSupabaseBrowserClient(), []);
 
   React.useEffect(() => setMounted(true), []);
@@ -35,25 +36,28 @@ export function StreamCard({ model }: { model: StreamCardModel }) {
   const handleFollow = async (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    if (followBusy) return;
 
     if (!supabase) {
-      toast.error("Unable to initialize Supabase client.");
+      toast.error("Unable to initialize connection.");
       return;
     }
 
-    const { data: user } = await supabase.auth.getUser();
-    if (!user.user) {
+    const { data: authData } = await supabase.auth.getUser();
+    if (!authData.user) {
       toast.error("Please log in to follow");
       return;
     }
 
+    setFollowBusy(true);
     try {
       const { error } = await supabase
         .from("user_favorites")
-        .insert({ user_id: user.user.id, model_id: model.hostId });
+        .insert({ user_id: authData.user.id, model_id: model.hostId });
 
       if (error) {
-        if (error.code === '23505') { // unique violation
+        if (error.code === "23505") {
+          setIsFollowing(true);
           toast.info("Already following");
         } else {
           throw error;
@@ -62,108 +66,130 @@ export function StreamCard({ model }: { model: StreamCardModel }) {
         setIsFollowing(true);
         toast.success("Followed!");
       }
-    } catch (error) {
-      console.error("Follow error:", error);
+    } catch {
       toast.error("Failed to follow");
+    } finally {
+      setFollowBusy(false);
     }
+  };
+
+  const handleExpand = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (model.streamId) setShowLiveModal(true);
   };
 
   return (
     <>
-    <Link href={`/model/${encodeURIComponent(model.username || model.hostId)}`} className="block">
-      <motion.div
-        whileHover={{ y: -3 }}
-        transition={{ type: "spring", stiffness: 250, damping: 22 }}
-        className="group overflow-hidden rounded-2xl border border-white/10 bg-neutral-900/30 hover:border-white/20"
+      <Link
+        href={`/model/${encodeURIComponent(model.username || model.hostId)}`}
+        className="group block focus:outline-none"
       >
-        <div className="relative aspect-[4/5] bg-gradient-to-br from-neutral-900 to-neutral-950">
-          {model.previewUrl ? (
-            <img
-              src={model.previewUrl}
-              alt={model.displayName}
-              className="absolute inset-0 h-full w-full object-cover opacity-90"
-            />
-          ) : (
-            <div className="absolute inset-0 opacity-80" />
-          )}
+        <motion.div
+          whileHover={{ y: -4 }}
+          transition={{ type: "spring", stiffness: 300, damping: 24 }}
+          className="overflow-hidden rounded-2xl border border-white/[0.06] bg-neutral-900/40 transition-colors group-hover:border-white/15"
+        >
+          {/* Thumbnail */}
+          <div className="relative aspect-[4/5] overflow-hidden bg-gradient-to-br from-neutral-800 to-neutral-950">
+            {model.previewUrl ? (
+              <img
+                src={model.previewUrl}
+                alt={model.displayName}
+                className="absolute inset-0 h-full w-full object-cover opacity-90 transition-all duration-500 group-hover:scale-105 group-hover:opacity-100"
+              />
+            ) : (
+              <div className="absolute inset-0 bg-gradient-to-br from-violet-900/20 via-neutral-900 to-cyan-900/20" />
+            )}
 
-          <div className="absolute left-3 top-3 flex items-center gap-2">
-            <span
-              className={cn(
-                "rounded-full px-2 py-1 text-[11px] font-semibold",
-                model.isLive
-                  ? "bg-rose-500/90 text-white"
-                  : "bg-neutral-800 text-neutral-200"
-              )}
-            >
-              {model.isLive ? "LIVE" : "OFFLINE"}
-            </span>
-            {model.region ? (
-              <span className="rounded-full bg-black/50 px-2 py-1 text-[11px] text-neutral-200">
-                {model.region}
+            {/* Top overlay badges */}
+            <div className="absolute left-2.5 top-2.5 flex items-center gap-1.5">
+              <span
+                className={cn(
+                  "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider shadow-lg backdrop-blur-sm transition-all",
+                  model.isLive
+                    ? "bg-red-600/90 text-white shadow-red-600/20"
+                    : "bg-neutral-800/80 text-neutral-300"
+                )}
+              >
+                {model.isLive && (
+                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-white" />
+                )}
+                {model.isLive ? "Live" : "Offline"}
               </span>
-            ) : null}
-          </div>
-          {model.streamId ? (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                setShowLiveModal(true);
-              }}
-              className="absolute right-3 top-3 rounded-full bg-black/60 p-2 text-white hover:bg-black/80"
-              aria-label="Open live preview"
-            >
-              <Maximize2 className="h-4 w-4" />
-            </button>
-          ) : null}
-
-          <div className="absolute bottom-0 left-0 right-0 p-3 bg-gradient-to-t from-black/70 to-transparent">
-            <div className="font-semibold text-neutral-100 truncate">
-              {model.displayName}
-            </div>
-            {model.title ? (
-              <div className="mt-0.5 text-[11px] text-neutral-300 truncate">{model.title}</div>
-            ) : null}
-            <div className="mt-1 flex items-center justify-between text-xs text-neutral-300">
-              <div className="inline-flex items-center gap-1">
-                <Eye className="h-3.5 w-3.5" />
-                <span className="tabular-nums" suppressHydrationWarning>
-                  {mounted ? model.viewers.toLocaleString("en-US") : "—"}
+              {model.category && (
+                <span className="rounded-full bg-black/50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-neutral-200 backdrop-blur-sm">
+                  {model.category}
                 </span>
-              </div>
+              )}
+            </div>
+
+            {/* Expand button */}
+            {model.streamId && (
               <button
                 type="button"
-                className="inline-flex items-center gap-1 rounded-full bg-neutral-900/60 px-2.5 py-1 hover:bg-neutral-900"
-                onClick={handleFollow}
+                onClick={handleExpand}
+                className="absolute right-2.5 top-2.5 flex h-8 w-8 items-center justify-center rounded-full bg-black/50 text-white opacity-0 backdrop-blur-sm transition-all hover:bg-black/70 group-hover:opacity-100"
+                aria-label="Open live preview"
               >
-                <Heart className={cn("h-3.5 w-3.5", isFollowing ? "text-rose-500" : "text-rose-400")} />
-                Follow
+                <Maximize2 className="h-3.5 w-3.5" />
               </button>
+            )}
+
+            {/* Bottom gradient + info */}
+            <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent p-3 pt-10">
+              <div className="truncate text-sm font-bold text-white">{model.displayName}</div>
+              {model.title && (
+                <div className="mt-0.5 truncate text-[11px] text-neutral-300">{model.title}</div>
+              )}
+
+              <div className="mt-2 flex items-center justify-between">
+                <div className="inline-flex items-center gap-1 text-[11px] text-neutral-300">
+                  <Eye className="h-3.5 w-3.5 text-neutral-400" />
+                  <span className="tabular-nums" suppressHydrationWarning>
+                    {mounted ? model.viewers.toLocaleString("en-US") : "—"}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleFollow}
+                  disabled={followBusy}
+                  className={cn(
+                    "inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold transition-all disabled:opacity-50",
+                    isFollowing
+                      ? "bg-rose-500/20 text-rose-300"
+                      : "bg-white/10 text-neutral-200 hover:bg-white/20"
+                  )}
+                >
+                  <Heart className={cn("h-3 w-3", isFollowing && "fill-rose-400 text-rose-400")} />
+                  {isFollowing ? "Following" : "Follow"}
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      </motion.div>
-    </Link>
-    {showLiveModal && model.streamId ? (
-      <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/90 p-4">
-        <div className="relative h-[85vh] w-[92vw] max-w-6xl rounded-2xl border border-white/10 bg-black">
-          <button
-            type="button"
-            onClick={() => setShowLiveModal(false)}
-            className="absolute right-3 top-3 z-20 rounded-full bg-black/70 p-2 text-white hover:bg-black"
-            aria-label="Close live preview"
+        </motion.div>
+      </Link>
+
+      {/* Live preview modal */}
+      {showLiveModal && model.streamId && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/90 p-4 backdrop-blur-sm">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.96 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="relative h-[85vh] w-[92vw] max-w-6xl overflow-hidden rounded-2xl border border-white/10 bg-black"
           >
-            <X className="h-5 w-5" />
-          </button>
-          <div className="h-full w-full">
+            <button
+              type="button"
+              onClick={() => setShowLiveModal(false)}
+              className="absolute right-3 top-3 z-20 flex h-9 w-9 items-center justify-center rounded-full bg-black/70 text-white transition-colors hover:bg-black"
+              aria-label="Close live preview"
+            >
+              <X className="h-5 w-5" />
+            </button>
             <LiveStreamViewer streamId={model.streamId} hostId={model.hostId} />
-          </div>
+          </motion.div>
         </div>
-      </div>
-    ) : null}
+      )}
     </>
   );
 }
-

@@ -15,57 +15,44 @@ function stableViewerCount(seed: string) {
   return 120 + (hash % 500);
 }
 
+function mapRow(item: any): StreamCardModel {
+  const profile = item.host_profile && !Array.isArray(item.host_profile)
+    ? item.host_profile
+    : Array.isArray(item.host_profile)
+      ? item.host_profile[0]
+      : null;
+
+  return {
+    id: item.id ?? item.host,
+    hostId: item.host,
+    streamId: item.id,
+    username: profile?.username || item.host,
+    displayName: profile?.display_name ?? profile?.username ?? "Creator",
+    title: item.title ?? "Live now",
+    description: item.description ?? null,
+    previewUrl: item.cover_image ?? item.media_url ?? null,
+    region: "Live",
+    viewers: stableViewerCount(`${item.host}-${item.id ?? ""}`),
+    isLive: item.status === "live",
+    category: item.category ?? null,
+  };
+}
+
 export function StreamGrid({ initialData = [] }: StreamGridProps) {
-  /**
-   * 1. DATA MAPPING
-   * We map the Supabase rows to the StreamCard UI format.
-   * We use 'item.host_profile' to match the joined data from our page.tsx query.
-   */
   const [models, setModels] = React.useState<StreamCardModel[]>(
-    initialData.map((item: any) => ({
-      id: item.id ?? item.host,
-      hostId: item.host,
-      username: item.host_profile?.username || item.host,
-      displayName: item.host_profile?.display_name ?? item.host_profile?.username ?? "Creator",
-      title: item.title ?? "Live now",
-      description: item.description ?? null,
-      previewUrl: item.cover_image ?? item.media_url ?? null,
-      region: "Live",
-      viewers: stableViewerCount(`${item.host}-${item.id ?? ""}`),
-      isLive: true,
-      category: item.category,
-    }))
+    initialData.map(mapRow)
   );
+
   React.useEffect(() => {
-    setModels(
-      initialData.map((item: any) => ({
-        id: item.id ?? item.host,
-        hostId: item.host,
-        username: item.host_profile?.username || item.host,
-        displayName: item.host_profile?.display_name ?? item.host_profile?.username ?? "Creator",
-        title: item.title ?? "Live now",
-        description: item.description ?? null,
-        previewUrl: item.cover_image ?? item.media_url ?? null,
-        region: "Live",
-        viewers: stableViewerCount(`${item.host}-${item.id ?? ""}`),
-        isLive: true,
-        category: item.category,
-      }))
-    );
+    setModels(initialData.map(mapRow));
   }, [initialData]);
 
-  // 3. EMPTY STATE
-  // If no streams survive the filters, we return null so the 'No live rooms' 
-  // message in page.tsx can take over the screen.
   if (models.length === 0) return null;
 
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4 xl:grid-cols-5">
       {models.map((m) => (
-        <StreamCard 
-          key={m.id}
-          model={m} 
-        />
+        <StreamCard key={m.id} model={m} />
       ))}
     </div>
   );
