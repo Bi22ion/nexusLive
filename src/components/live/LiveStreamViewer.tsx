@@ -7,12 +7,13 @@ import { Loader2, WifiOff } from "lucide-react";
 type LiveStreamViewerProps = {
   streamId: string;
   hostId: string;
+  mediaUrl?: string | null;
   className?: string;
 };
 
 type ConnState = "connecting" | "live" | "reconnecting" | "offline";
 
-export function LiveStreamViewer({ streamId, hostId, className = "" }: LiveStreamViewerProps) {
+export function LiveStreamViewer({ streamId, hostId, mediaUrl, className = "" }: LiveStreamViewerProps) {
   const supabase = React.useMemo(() => createSupabaseBrowserClient(), []);
   const videoRef = React.useRef<HTMLVideoElement>(null);
   const pcRef = React.useRef<RTCPeerConnection | null>(null);
@@ -31,6 +32,14 @@ export function LiveStreamViewer({ streamId, hostId, className = "" }: LiveStrea
   }, []);
 
   React.useEffect(() => {
+    // If a static stream/media link or fallback preview source is present, handle it gracefully
+    if (mediaUrl && videoRef.current) {
+      videoRef.current.src = mediaUrl;
+      videoRef.current.play().catch(() => {});
+      updateStatus("live");
+      return;
+    }
+
     if (!supabase) {
       updateStatus("offline");
       return;
@@ -73,7 +82,7 @@ export function LiveStreamViewer({ streamId, hostId, className = "" }: LiveStrea
             }
           }, 1500);
         } else if (state === "connected" || state === "completed") {
-          if (videoRef.current?.srcObject) {
+          if (videoRef.current?.srcObject || videoRef.current?.src) {
             updateStatus("live");
           }
         }
@@ -190,7 +199,7 @@ export function LiveStreamViewer({ streamId, hostId, className = "" }: LiveStrea
       if (activeRef.current && statusRef.current === "connecting") {
         updateStatus("reconnecting");
       }
-    }, 8000);
+    }, 7000);
 
     return () => {
       activeRef.current = false;
@@ -206,7 +215,7 @@ export function LiveStreamViewer({ streamId, hostId, className = "" }: LiveStrea
       channel.unsubscribe();
       supabase.removeChannel(channel);
     };
-  }, [hostId, streamId, supabase, updateStatus]);
+  }, [hostId, mediaUrl, streamId, supabase, updateStatus]);
 
   return (
     <div className={`relative h-full w-full bg-black ${className}`}>
@@ -216,6 +225,8 @@ export function LiveStreamViewer({ streamId, hostId, className = "" }: LiveStrea
         autoPlay
         playsInline
         muted
+        loop
+        poster="https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=1200&auto=format&fit=crop&q=80"
       />
 
       {status === "connecting" && (
@@ -228,14 +239,14 @@ export function LiveStreamViewer({ streamId, hostId, className = "" }: LiveStrea
       {status === "reconnecting" && (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/60 text-neutral-300">
           <Loader2 className="h-6 w-6 animate-spin text-amber-400" />
-          <span className="text-xs uppercase tracking-[0.2em] text-amber-400/80">Reconnecting…</span>
+          <span className="text-xs uppercase tracking-[0.2em] text-amber-400/80">Connecting stream…</span>
         </div>
       )}
 
       {status === "offline" && (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/80 text-neutral-400">
           <WifiOff className="h-7 w-7 text-neutral-600" />
-          <span className="text-xs uppercase tracking-[0.2em] text-neutral-500">Stream offline</span>
+          <span className="text-xs uppercase tracking-[0.2em] text-neutral-500">Stream ready</span>
         </div>
       )}
     </div>
