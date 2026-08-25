@@ -41,7 +41,7 @@ export default function Home({ searchParams }: HomeProps) {
   // CrakRevenue affiliate widget URL fallback mapping environment variable
   const crakRevenueUrl = 
     process.env.NEXT_PUBLIC_CRAKREVENUE_WIDGET_URL || 
-    "[https://t.frtayb.com/421947/3664/0?target=widgets&po=6533&aff_sub5=SF_006OG000004lmDN](https://t.frtayb.com/421947/3664/0?target=widgets&po=6533&aff_sub5=SF_006OG000004lmDN)";
+    "https://t.frtayb.com/421947/3664/0?target=widgets&po=6533&aff_sub5=SF_006OG000004lmDN";
 
   React.useEffect(() => {
     searchParams.then((params) => {
@@ -159,7 +159,7 @@ export default function Home({ searchParams }: HomeProps) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
         <div className="flex flex-col items-center gap-3 text-neutral-500">
-          <Loader2 className="h-7 w-7 animate-spin"/>
+          <Loader2 className="h-7 w-7 animate-spin" />
           <span className="text-xs uppercase tracking-[0.2em]">Loading live streams</span>
         </div>
       </div>
@@ -179,7 +179,7 @@ export default function Home({ searchParams }: HomeProps) {
                 : "bg-neutral-900/40 text-neutral-400 border border-white/[0.06] hover:text-neutral-200"
             }`}
           >
-            <Users className="h-4 w-4"/>
+            <Users className="h-4 w-4" />
             Community Creators ({soloStreams.length})
           </button>
           
@@ -191,13 +191,16 @@ export default function Home({ searchParams }: HomeProps) {
                 : "bg-neutral-900/40 text-neutral-400 border border-white/[0.06] hover:text-neutral-200"
             }`}
           >
-            <Globe className="h-4 w-4"/>
+            <Globe className="h-4 w-4" />
             Global Models Feed
           </button>
         </div>
 
         {feedSource === "community" && (
-          <Link className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white text-xs font-semibold transition" href="/studio">
+          <Link
+            href="/studio"
+            className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white text-xs font-semibold transition"
+          >
             Start Streaming
           </Link>
         )}
@@ -209,8 +212,11 @@ export default function Home({ searchParams }: HomeProps) {
             {filter}
           </span>
           <span className="text-sm font-bold text-white">{filterValue}</span>
-          <Link className="ml-auto inline-flex items-center gap-1 rounded-full bg-white/5 px-3 py-1 text-[11px] font-semibold text-neutral-300 transition-colors hover:bg-white/10 hover:text-white" href="/">
-            <X className="h-3 w-3"/>
+          <Link
+            href="/"
+            className="ml-auto inline-flex items-center gap-1 rounded-full bg-white/5 px-3 py-1 text-[11px] font-semibold text-neutral-300 transition-colors hover:bg-white/10 hover:text-white"
+          >
+            <X className="h-3 w-3" />
             Clear
           </Link>
         </div>
@@ -248,7 +254,7 @@ export default function Home({ searchParams }: HomeProps) {
                   Live PK Battles
                 </h2>
               </div>
-              <FeaturedPkBattles initialData="{pkStreams}"/>
+              <FeaturedPkBattles initialData={pkStreams} />
             </section>
           )}
 
@@ -288,7 +294,7 @@ export default function Home({ searchParams }: HomeProps) {
             </div>
 
             {soloStreams.length > 0 ? (
-              <StreamGrid initialData="{soloStreams}"/>
+              <StreamGrid initialData={soloStreams} />
             ) : (
               <div className="rounded-2xl border border-dashed border-white/[0.08] bg-neutral-900/20 py-16 text-center">
                 <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-neutral-800">
@@ -312,7 +318,7 @@ export default function Home({ searchParams }: HomeProps) {
                 <span className="h-4 w-1 rounded-full bg-violet-500" />
                 <h2 className="text-sm font-bold uppercase tracking-tight text-white">New Models</h2>
               </div>
-              <StreamGrid 5)} initialData="{soloStreams.slice(0,"/>
+              <StreamGrid initialData={soloStreams.slice(0, 5)} />
             </section>
           )}
         </>
