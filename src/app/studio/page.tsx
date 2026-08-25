@@ -224,7 +224,6 @@ export default function CreatorStudio() {
         alert("Your current account is not a host account. Please sign in with a host account to stream.");
         return;
       }
-      // Destructure user safely to avoid reference errors
       const { data: authData, error: authError } = await supabase.auth.getUser();
 
       if (authError || !authData.user) {
@@ -235,7 +234,6 @@ export default function CreatorStudio() {
       const user = authData.user;
       setHostUserId(user.id);
 
-      // Ensure profile exists
       const { data: existingProfile } = await supabase
         .from("profiles")
         .select("id")
@@ -243,7 +241,6 @@ export default function CreatorStudio() {
         .single();
 
       if (!existingProfile) {
-        // Create profile if it doesn't exist
         const { error: profileError } = await supabase
           .from("profiles")
           .insert({
@@ -283,7 +280,6 @@ export default function CreatorStudio() {
         media_url: "webrtc://live",
       };
 
-      // Avoid relying on DB unique constraints; update existing stream if present.
       const { data: existingStream, error: existingStreamError } = await supabase
         .from("program_schedule")
         .select("id")
@@ -309,7 +305,6 @@ export default function CreatorStudio() {
 
       let { data: persistedStream, error } = await tryWriteStream(streamData);
 
-      // Backward-compatible fallback for older DB schemas missing new columns.
       if (error?.code === "PGRST204") {
         const { description: _description, ...fallbackNoDescription } = streamData;
         ({ data: persistedStream, error } = await tryWriteStream(fallbackNoDescription));
@@ -430,14 +425,12 @@ export default function CreatorStudio() {
       const archiveTitle = streamTitle.trim() || "Live Replay";
       const archiveDescription = streamDescription.trim() || "Auto-recorded from live studio session.";
 
-      // Mark stream as ended instead of deleting so recording jobs can reference it.
       await supabase
         .from("program_schedule")
         .update({ status: "ended", ended_at: nowIso })
         .eq("host", user.id)
         .eq("status", "live");
 
-      // Create recording pipeline jobs and VOD placeholders (best effort).
       if (streamIdToArchive) {
         const { error: recordingJobError } = await supabase.from("recording_jobs").insert({
           host_id: user.id,
