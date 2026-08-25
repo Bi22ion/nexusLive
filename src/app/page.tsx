@@ -38,6 +38,11 @@ export default function Home({ searchParams }: HomeProps) {
   
   const supabase = React.useMemo(() => createSupabaseBrowserClient(), []);
 
+  // CrakRevenue affiliate widget URL fallback mapping environment variable
+  const crakRevenueUrl = 
+    process.env.NEXT_PUBLIC_CRAKREVENUE_WIDGET_URL || 
+    "https://t.frtayb.com/421947/3664/0?target=widgets&po=6533&aff_sub5=SF_006OG000004lmDN";
+
   React.useEffect(() => {
     searchParams.then((params) => {
       setCategory(params.category);
@@ -231,7 +236,7 @@ export default function Home({ searchParams }: HomeProps) {
           
           <div className="w-full min-h-[750px] bg-neutral-950 rounded-2xl overflow-hidden border border-purple-500/20 shadow-2xl relative">
             <iframe
-              src="https://t.frtayb.com/421947/3664/0?target=widgets&po=6533&aff_sub5=SF_0060G000004ImDN"
+              src={crakRevenueUrl}
               title="Global Live Models Feed"
               className="w-full h-full min-h-[750px] border-0"
               sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
@@ -321,3 +326,4 @@ export default function Home({ searchParams }: HomeProps) {
     </div>
   );
 }
+```[cite: 6]
