@@ -2,110 +2,204 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { Eye, ShieldCheck, Lock } from "lucide-react";
+import { motion } from "framer-motion";
+import { Eye, Heart, Maximize2, X } from "lucide-react";
+import { cn } from "@/lib/cn";
+import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { toast } from "sonner";
+import { LiveStreamViewer } from "@/components/live/LiveStreamViewer";
 
-type StreamCardProps = {
-  stream: {
-    id: string;
-    title?: string | null;
-    category?: string | null;
-    thumbnail_url?: string | null;
-    media_url?: string | null;
-    is_private?: boolean | null;
-    private_entry_tokens?: number | null;
-    host?: string;
-    profiles?: {
-      username?: string | null;
-      display_name?: string | null;
-      avatar_url?: string | null;
-      is_online?: boolean | null;
-    } | null;
-  };
+export type StreamCardModel = {
+  id: string;
+  hostId: string;
+  streamId?: string;
+  username: string;
+  displayName: string;
+  title?: string | null;
+  description?: string | null;
+  previewUrl?: string | null;
+  region?: string | null;
+  viewers: number;
+  isLive: boolean;
+  category?: string | null;
 };
 
-export function StreamCard({ stream }: StreamCardProps) {
-  const profile = stream.profiles;
-  const username = profile?.username || "model";
-  const displayName = profile?.display_name || username;
-  const avatarUrl = profile?.avatar_url || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500&auto=format&fit=crop&q=60";
-  const thumbnailUrl = stream.thumbnail_url || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=800&auto=format&fit=crop&q=80";
+export function StreamCard({ model }: { model: StreamCardModel }) {
+  const [mounted, setMounted] = React.useState(false);
+  const [isFollowing, setIsFollowing] = React.useState(false);
+  const [showLiveModal, setShowLiveModal] = React.useState(false);
+  const [followBusy, setFollowBusy] = React.useState(false);
+  const supabase = React.useMemo(() => createSupabaseBrowserClient(), []);
 
-  // Stable pseudo-random viewer count for realism
-  const viewerCount = React.useMemo(() => {
-    let hash = 0;
-    const seed = stream.id + username;
-    for (let i = 0; i < seed.length; i++) {
-      hash = (hash * 31 + seed.charCodeAt(i)) >>> 0;
+  React.useEffect(() => setMounted(true), []);
+
+  const handleFollow = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (followBusy) return;
+
+    if (!supabase) {
+      toast.error("Unable to initialize connection.");
+      return;
     }
-    return 140 + (hash % 700);
-  }, [stream.id, username]);
+
+    const { data: authData } = await supabase.auth.getUser();
+    if (!authData.user) {
+      toast.error("Please log in to follow");
+      return;
+    }
+
+    setFollowBusy(true);
+    try {
+      const { error } = await supabase
+        .from("user_favorites")
+        .insert({ user_id: authData.user.id, model_id: model.hostId });
+
+      if (error) {
+        if (error.code === "23505") {
+          setIsFollowing(true);
+          toast.info("Already following");
+        } else {
+          throw error;
+        }
+      } else {
+        setIsFollowing(true);
+        toast.success("Followed!");
+      }
+    } catch {
+      toast.error("Failed to follow");
+    } finally {
+      setFollowBusy(false);
+    }
+  };
+
+  const handleCardClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    // If there is an active stream session, open the live stream modal natively on-site
+    if (model.streamId) {
+      setShowLiveModal(true);
+    } else {
+      // Otherwise, route to their internal profile page on your site
+      window.location.href = `/model/${model.username}`;
+    }
+  };
 
   return (
-    <Link
-      href={`/model/${encodeURIComponent(username)}`}
-      className="group relative flex flex-col overflow-hidden rounded-2xl border border-white/10 bg-neutral-900/60 transition-all duration-300 hover:-translate-y-1 hover:border-violet-500/50 hover:shadow-xl hover:shadow-violet-500/10"
-    >
-      {/* Thumbnail Container */}
-      <div className="relative aspect-video w-full overflow-hidden bg-neutral-950">
-        <img
-          src={thumbnailUrl}
-          alt={stream.title || displayName}
-          className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
-          loading="lazy"
-        />
+    <>
+      <div
+        onClick={handleCardClick}
+        className="group block cursor-pointer focus:outline-none"
+      >
+        <motion.div
+          whileHover={{ y: -4 }}
+          transition={{ type: "spring", stiffness: 300, damping: 24 }}
+          className="overflow-hidden rounded-2xl border border-white/[0.06] bg-neutral-900/40 transition-colors group-hover:border-red-600/50"
+        >
+          {/* Thumbnail */}
+          <div className="relative aspect-[4/5] overflow-hidden bg-gradient-to-br from-neutral-800 to-neutral-950">
+            {model.previewUrl ? (
+              <img
+                src={model.previewUrl}
+                alt={model.displayName}
+                className="absolute inset-0 h-full w-full object-cover opacity-90 transition-all duration-500 group-hover:scale-105 group-hover:opacity-100"
+              />
+            ) : (
+              <div className="absolute inset-0 bg-gradient-to-br from-violet-900/20 via-neutral-900 to-cyan-900/20" />
+            )}
 
-        {/* Gradient Overlay */}
-        <div className="absolute inset-0 bg-gradient-to-t from-neutral-950 via-transparent to-black/40 opacity-80" />
+            {/* Top overlay badges */}
+            <div className="absolute left-2.5 top-2.5 flex items-center gap-1.5">
+              <span
+                className={cn(
+                  "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider shadow-lg backdrop-blur-sm transition-all",
+                  model.isLive
+                    ? "bg-red-600/90 text-white shadow-red-600/20"
+                    : "bg-neutral-800/80 text-neutral-300"
+                )}
+              >
+                {model.isLive && (
+                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-white" />
+                )}
+                {model.isLive ? "Live" : "Offline"}
+              </span>
+              {model.category && (
+                <span className="rounded-full bg-black/50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-neutral-200 backdrop-blur-sm">
+                  {model.category}
+                </span>
+              )}
+            </div>
 
-        {/* Top Badges */}
-        <div className="absolute left-3 top-3 flex items-center gap-2">
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-red-600 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-white shadow-md shadow-red-600/30">
-            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-white" />
-            Live
-          </span>
-          {stream.category && (
-            <span className="rounded-full bg-black/60 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-neutral-200 backdrop-blur-md">
-              {stream.category}
-            </span>
-          )}
-        </div>
+            {/* Expand / Watch button indicator */}
+            <div className="absolute right-2.5 top-2.5 flex h-8 w-8 items-center justify-center rounded-full bg-black/50 text-white opacity-0 backdrop-blur-sm transition-all hover:bg-black/70 group-hover:opacity-100">
+              <Maximize2 className="h-3.5 w-3.5" />
+            </div>
 
-        {/* Viewer Count & Private Badge */}
-        <div className="absolute right-3 top-3 flex items-center gap-1.5">
-          {stream.is_private && (
-            <span className="flex items-center gap-1 rounded-full bg-violet-600/90 px-2.5 py-1 text-[10px] font-bold text-white backdrop-blur-md">
-              <Lock className="h-3 w-3" />
-              VIP
-            </span>
-          )}
-          <span className="flex items-center gap-1 rounded-full bg-black/60 px-2.5 py-1 text-[10px] font-semibold text-neutral-200 backdrop-blur-md">
-            <Eye className="h-3.5 w-3.5 text-neutral-400" />
-            <span className="tabular-nums">{viewerCount.toLocaleString()}</span>
-          </span>
-        </div>
-      </div>
+            {/* Bottom gradient + info */}
+            <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent p-3 pt-10">
+              <div className="truncate text-sm font-bold text-white group-hover:text-red-400 transition-colors">
+                {model.displayName}
+              </div>
+              {model.title && (
+                <div className="mt-0.5 truncate text-[11px] text-neutral-300">
+                  {model.title}
+                </div>
+              )}
 
-      {/* Model & Stream Info */}
-      <div className="flex flex-1 gap-3 p-4">
-        <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-full border border-white/10 bg-neutral-800">
-          <img src={avatarUrl} alt={displayName} className="h-full w-full object-cover" />
-          {profile?.is_online && (
-            <span className="absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-neutral-900 bg-emerald-500" />
-          )}
-        </div>
-
-        <div className="flex flex-1 flex-col justify-center min-w-0">
-          <div className="flex items-center gap-1.5">
-            <span className="truncate text-sm font-bold text-white group-hover:text-violet-400 transition-colors">
-              {displayName}
-            </span>
-            <ShieldCheck className="h-3.5 w-3.5 shrink-0 text-violet-400" />
+              <div className="mt-2 flex items-center justify-between">
+                <div className="inline-flex items-center gap-1 text-[11px] text-neutral-300">
+                  <Eye className="h-3.5 w-3.5 text-neutral-400" />
+                  <span className="tabular-nums" suppressHydrationWarning>
+                    {mounted ? model.viewers.toLocaleString("en-US") : "—"}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleFollow}
+                  disabled={followBusy}
+                  className={cn(
+                    "inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold transition-all disabled:opacity-50",
+                    isFollowing
+                      ? "bg-rose-500/20 text-rose-300"
+                      : "bg-white/10 text-neutral-200 hover:bg-white/20"
+                  )}
+                >
+                  <Heart
+                    className={cn(
+                      "h-3 w-3",
+                      isFollowing && "fill-rose-400 text-rose-400"
+                    )}
+                  />
+                  {isFollowing ? "Following" : "Follow"}
+                </button>
+              </div>
+            </div>
           </div>
-          <p className="truncate text-xs font-medium text-neutral-400 mt-0.5">
-            {stream.title || `Live interactive session with @${username}`}
-          </p>
-        </div>
+        </motion.div>
       </div>
-    </Link>
+
+      {/* Live preview modal operating entirely on your site */}
+      {showLiveModal && model.streamId && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/90 p-4 backdrop-blur-sm">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.96 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="relative h-[85vh] w-[92vw] max-w-6xl overflow-hidden rounded-2xl border border-white/10 bg-black"
+          >
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowLiveModal(false);
+              }}
+              className="absolute right-3 top-3 z-20 flex h-9 w-9 items-center justify-center rounded-full bg-black/70 text-white transition-colors hover:bg-black"
+              aria-label="Close live preview"
+            >
+              <X className="h-5 w-5" />
+            </button>
+            <LiveStreamViewer streamId={model.streamId} hostId={model.hostId} />
+          </motion.div>
+        </div>
+      )}
+    </>
   );
 }
