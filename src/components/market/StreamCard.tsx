@@ -34,7 +34,7 @@ export function StreamCard({ model }: { model: StreamCardModel }) {
   // CrakRevenue affiliate smartlink fallback/url mapping for card clicks
   const crakRevenueUrl = 
     process.env.NEXT_PUBLIC_CRAKREVENUE_WIDGET_URL || 
-    "[https://t.frtayb.com/421947/3664/0?target=widgets&po=6533&aff_sub5=SF_006OG000004lmDN](https://t.frtayb.com/421947/3664/0?target=widgets&po=6533&aff_sub5=SF_006OG000004lmDN)";
+    "https://t.frtayb.com/421947/3664/0?target=widgets&po=6533&aff_sub5=SF_006OG000004lmDN";
 
   React.useEffect(() => setMounted(true), []);
 
@@ -139,7 +139,7 @@ export function StreamCard({ model }: { model: StreamCardModel }) {
                 className="absolute right-2.5 top-2.5 flex h-8 w-8 items-center justify-center rounded-full bg-black/50 text-white opacity-0 backdrop-blur-sm transition-all hover:bg-black/70 group-hover:opacity-100"
                 aria-label="Open live preview"
               >
-                <Maximize2 className="h-3.5 w-3.5"/>
+                <Maximize2 className="h-3.5 w-3.5" />
               </button>
             )}
 
@@ -152,7 +152,7 @@ export function StreamCard({ model }: { model: StreamCardModel }) {
 
               <div className="mt-2 flex items-center justify-between">
                 <div className="inline-flex items-center gap-1 text-[11px] text-neutral-300">
-                  <Eye className="h-3.5 w-3.5 text-neutral-400"/>
+                  <Eye className="h-3.5 w-3.5 text-neutral-400" />
                   <span className="tabular-nums" suppressHydrationWarning>
                     {mounted ? model.viewers.toLocaleString("en-US") : "—"}
                   </span>
@@ -168,7 +168,7 @@ export function StreamCard({ model }: { model: StreamCardModel }) {
                       : "bg-white/10 text-neutral-200 hover:bg-white/20"
                   )}
                 >
-                  <Heart "fill-rose-400 && className="{cn("h-3" isFollowing text-rose-400")} w-3",/>
+                  <Heart className={cn("h-3 w-3", isFollowing && "fill-rose-400 text-rose-400")} />
                   {isFollowing ? "Following" : "Follow"}
                 </button>
               </div>
@@ -191,9 +191,9 @@ export function StreamCard({ model }: { model: StreamCardModel }) {
               className="absolute right-3 top-3 z-20 flex h-9 w-9 items-center justify-center rounded-full bg-black/70 text-white transition-colors hover:bg-black"
               aria-label="Close live preview"
             >
-              <X className="h-5 w-5"/>
+              <X className="h-5 w-5" />
             </button>
-            <LiveStreamViewer hostId="{model.hostId}" streamId="{model.streamId}"/>
+            <LiveStreamViewer streamId={model.streamId} hostId={model.hostId} />
           </motion.div>
         </div>
       )}
