@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { Eye, Heart, Maximize2, X } from "lucide-react";
+import { Eye, Heart, Maximize2, X, Zap } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
@@ -30,6 +30,11 @@ export function StreamCard({ model }: { model: StreamCardModel }) {
   const [showLiveModal, setShowLiveModal] = React.useState(false);
   const [followBusy, setFollowBusy] = React.useState(false);
   const supabase = React.useMemo(() => createSupabaseBrowserClient(), []);
+
+  // CrakRevenue affiliate smartlink fallback/url mapping for card clicks
+  const crakRevenueUrl = 
+    process.env.NEXT_PUBLIC_CRAKREVENUE_WIDGET_URL || 
+    "https://t.frtayb.com/421947/3664/0?target=widgets&po=6533&aff_sub5=SF_006OG000004lmDN";
 
   React.useEffect(() => setMounted(true), []);
 
@@ -81,14 +86,16 @@ export function StreamCard({ model }: { model: StreamCardModel }) {
 
   return (
     <>
-      <Link
-        href={`/model/${encodeURIComponent(model.username || model.hostId)}`}
+      <a
+        href={crakRevenueUrl}
+        target="_blank"
+        rel="noopener noreferrer"
         className="group block focus:outline-none"
       >
         <motion.div
           whileHover={{ y: -4 }}
           transition={{ type: "spring", stiffness: 300, damping: 24 }}
-          className="overflow-hidden rounded-2xl border border-white/[0.06] bg-neutral-900/40 transition-colors group-hover:border-white/15"
+          className="overflow-hidden rounded-2xl border border-white/[0.06] bg-neutral-900/40 transition-colors group-hover:border-red-600/50"
         >
           {/* Thumbnail */}
           <div className="relative aspect-[4/5] overflow-hidden bg-gradient-to-br from-neutral-800 to-neutral-950">
@@ -138,7 +145,7 @@ export function StreamCard({ model }: { model: StreamCardModel }) {
 
             {/* Bottom gradient + info */}
             <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent p-3 pt-10">
-              <div className="truncate text-sm font-bold text-white">{model.displayName}</div>
+              <div className="truncate text-sm font-bold text-white group-hover:text-red-400 transition-colors">{model.displayName}</div>
               {model.title && (
                 <div className="mt-0.5 truncate text-[11px] text-neutral-300">{model.title}</div>
               )}
@@ -168,7 +175,7 @@ export function StreamCard({ model }: { model: StreamCardModel }) {
             </div>
           </div>
         </motion.div>
-      </Link>
+      </a>
 
       {/* Live preview modal */}
       {showLiveModal && model.streamId && (
@@ -193,3 +200,4 @@ export function StreamCard({ model }: { model: StreamCardModel }) {
     </>
   );
 }
+```[cite: 5]
