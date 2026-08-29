@@ -31,17 +31,17 @@ export default function Home({ searchParams }: HomeProps) {
   const [filter, setFilter] = React.useState<string | undefined>();
   const [filterValue, setFilterValue] = React.useState<string | undefined>();
   const [liveStreams, setLiveStreams] = React.useState<any[]>([]);
+  const [globalModels, setGlobalModels] = React.useState<any[]>([]);
   const [loading, setLoading] = React.useState(true);
+  const [globalLoading, setGlobalLoading] = React.useState(false);
   
-  // New state to toggle between Community Creators and Global Network Feed
   const [feedSource, setFeedSource] = React.useState<"community" | "global">("community");
   
   const supabase = React.useMemo(() => createSupabaseBrowserClient(), []);
 
-  // CrakRevenue affiliate widget URL fallback mapping environment variable
-  const crakRevenueUrl = 
-    process.env.NEXT_PUBLIC_CRAKREVENUE_WIDGET_URL || 
-    "https://t.frtayb.com/421947/3664/0?target=widgets&po=6533&aff_sub5=SF_006OG000004lmDN";
+  // Stripcash Configuration Credentials
+  const stripcashUserId = process.env.NEXT_PUBLIC_STRIPCASH_USER_ID || "88ae5b1a0d76e320bc0a1675ba92a8c9b6876a5915da871ca89c9a3809f3b6";
+  const stripcashApiBase = process.env.NEXT_PUBLIC_STRIPCASH_API_BASE || "https://go.whitetrafsa.com/api";
 
   React.useEffect(() => {
     searchParams.then((params) => {
@@ -50,6 +50,30 @@ export default function Home({ searchParams }: HomeProps) {
       setFilterValue(params.value);
     });
   }, [searchParams]);
+
+  // Fetch Stripcash models when global feed is selected
+  React.useEffect(() => {
+    if (feedSource !== "global") return;
+
+    async function fetchStripcashModels() {
+      setGlobalLoading(true);
+      try {
+        const res = await fetch(`${stripcashApiBase}/models?userId=${stripcashUserId}&limit=24`);
+        const data = await res.json();
+        if (data && data.models) {
+          setGlobalModels(data.models);
+        } else if (Array.isArray(data)) {
+          setGlobalModels(data);
+        }
+      } catch (err) {
+        console.error("Failed to fetch Stripcash models:", err);
+      } finally {
+        setGlobalLoading(false);
+      }
+    }
+
+    fetchStripcashModels();
+  }, [feedSource, stripcashApiBase, stripcashUserId]);
 
   const fetchLiveStreams = React.useCallback(async () => {
     if (!supabase) return;
@@ -98,21 +122,6 @@ export default function Home({ searchParams }: HomeProps) {
     return () => clearInterval(timer);
   }, [fetchLiveStreams]);
 
-  React.useEffect(() => {
-    if (!supabase) return;
-    const channel = supabase.channel("home-live-sync");
-    channel.on(
-      "postgres_changes",
-      { event: "*", schema: "public", table: "program_schedule" },
-      () => fetchLiveStreams()
-    );
-    const stop = subscribeWithRetry(channel);
-    return () => {
-      stop();
-      supabase.removeChannel(channel);
-    };
-  }, [fetchLiveStreams, supabase]);
-
   const applyClientFilter = (stream: any): boolean => {
     if (!filter || !filterValue) return true;
     const profile = stream.host_profile && !Array.isArray(stream.host_profile)
@@ -151,7 +160,6 @@ export default function Home({ searchParams }: HomeProps) {
   };
 
   const filteredStreams = liveStreams.filter(applyClientFilter);
-
   const pkStreams = filteredStreams.filter((s) => s.is_pk === true) || [];
   const soloStreams = filteredStreams.filter((s) => s.is_pk !== true) || [];
 
@@ -168,7 +176,7 @@ export default function Home({ searchParams }: HomeProps) {
 
   return (
     <div className="space-y-8 pb-16">
-      {/* Source Selector Bar: Lets viewers switch between local community creators and global models widget */}
+      {/* Source Selector Bar */}
       <div className="flex items-center justify-between border-b border-white/[0.08] pb-4">
         <div className="flex items-center gap-2">
           <button
@@ -192,7 +200,7 @@ export default function Home({ searchParams }: HomeProps) {
             }`}
           >
             <Globe className="h-4 w-4" />
-            Global Models Feed
+            Stripcash Models Feed
           </button>
         </div>
 
@@ -222,27 +230,61 @@ export default function Home({ searchParams }: HomeProps) {
         </div>
       )}
 
-      {/* Conditionally Render Content Based on Feed Source Choice */}
+      {/* Render Stripcash Models Feed vs Community Stream Lists */}
       {feedSource === "global" ? (
         <section className="space-y-4">
           <div className="flex flex-col gap-1">
             <h1 className="text-lg font-bold uppercase tracking-tight text-white">
-              Global Verified Models
+              Stripcash Verified Models Feed
             </h1>
             <p className="text-xs text-neutral-500">
-              Live interactive streams from across the world powered by secure network feeds
+              Fetched dynamically via Stripcash API endpoint ({stripcashApiBase})
             </p>
           </div>
           
-          <div className="w-full min-h-[750px] bg-neutral-950 rounded-2xl overflow-hidden border border-purple-500/20 shadow-2xl relative">
-            <iframe
-              src={crakRevenueUrl}
-              title="Global Live Models Feed"
-              className="w-full h-full min-h-[750px] border-0"
-              sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
-              loading="lazy"
-            />
-          </div>
+          {globalLoading ? (
+            <div className="flex min-h-[400px] items-center justify-center">
+              <Loader2 className="h-6 w-6 animate-spin text-purple-500" />
+            </div>
+          ) : globalModels.length > 0 ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+              {globalModels.map((model: any, idx: number) => (
+                <div key={model.id || idx} className="bg-neutral-900 rounded-xl overflow-hidden border border-purple-500/20">
+                  <div className="relative aspect-video bg-neutral-950 flex items-center justify-center">
+                    {model.previewUrl || model.avatar ? (
+                      <img src={model.previewUrl || model.avatar} alt={model.username} className="w-full h-full object-cover" />
+                    ) : (
+                      <span className="text-xs text-neutral-600">No Preview</span>
+                    )}
+                    <span className="absolute top-2 left-2 bg-red-600 text-xs px-2 py-0.5 rounded font-bold text-white animate-pulse">
+                      LIVE
+                    </span>
+                  </div>
+                  <div className="p-3">
+                    <h4 className="text-white font-semibold">{model.username || model.displayName}</h4>
+                    <p className="text-xs text-neutral-400 truncate">{model.subject || "Live Interactive Stream"}</p>
+                    <div className="flex justify-between items-center mt-3 text-xs text-neutral-500">
+                      <span>👁 {model.viewersCount || model.usersCount || 0}</span>
+                      <a 
+                        href={`https://go.whitetrafsa.com/${stripcashUserId}?tour_id=${model.id || ''}`} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="bg-purple-600 hover:bg-purple-500 text-white px-3 py-1 rounded-full font-medium"
+                      >
+                        Watch Live
+                      </a>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-dashed border-white/[0.08] bg-neutral-900/20 py-16 text-center">
+              <p className="text-sm font-bold uppercase tracking-widest text-neutral-500">
+                No active Stripcash models available or check API response format.
+              </p>
+            </div>
+          )}
         </section>
       ) : (
         <>
@@ -303,24 +345,9 @@ export default function Home({ searchParams }: HomeProps) {
                 <p className="text-sm font-bold uppercase tracking-widest text-neutral-500">
                   {filter && filterValue ? "No matching streams for this filter" : "No live rooms active"}
                 </p>
-                <p className="mt-1 text-xs text-neutral-600">
-                  {filter && filterValue
-                    ? "Try a different filter or clear it to see all live streams"
-                    : "Switch to the Global Models feed above or start a broadcast in your Studio"}
-                </p>
               </div>
             )}
           </section>
-
-          {soloStreams.length > 0 && !filter && (
-            <section>
-              <div className="mb-3 flex items-center gap-2">
-                <span className="h-4 w-1 rounded-full bg-violet-500" />
-                <h2 className="text-sm font-bold uppercase tracking-tight text-white">New Models</h2>
-              </div>
-              <StreamGrid initialData={soloStreams.slice(0, 5)} />
-            </section>
-          )}
         </>
       )}
     </div>
