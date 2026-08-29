@@ -5,8 +5,7 @@ import Link from "next/link";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { FeaturedPkBattles } from "@/components/market/FeaturedPkBattles";
 import { StreamGrid } from "@/components/market/StreamGrid";
-import { subscribeWithRetry } from "@/lib/realtime/subscribeWithRetry";
-import { Loader2, X, Globe, Users } from "lucide-react";
+import { Loader2, X, Globe, Users, Play, ShieldAlert } from "lucide-react";
 
 interface HomeProps {
   searchParams: Promise<{
@@ -36,10 +35,10 @@ export default function Home({ searchParams }: HomeProps) {
   const [globalLoading, setGlobalLoading] = React.useState(false);
   
   const [feedSource, setFeedSource] = React.useState<"community" | "global">("community");
+  const [activePlayerModel, setActivePlayerModel] = React.useState<any | null>(null);
   
   const supabase = React.useMemo(() => createSupabaseBrowserClient(), []);
 
-  // Stripcash Configuration Credentials
   const stripcashUserId = process.env.NEXT_PUBLIC_STRIPCASH_USER_ID || "88ae5b1a0d76e320bc0a1675ba92a8c9b6876a5915da871ca89c9a3809f3b6";
   const stripcashApiBase = process.env.NEXT_PUBLIC_STRIPCASH_API_BASE || "https://go.whitetrafsa.com/api";
 
@@ -51,7 +50,6 @@ export default function Home({ searchParams }: HomeProps) {
     });
   }, [searchParams]);
 
-  // Fetch Stripcash models when global feed is selected
   React.useEffect(() => {
     if (feedSource !== "global") return;
 
@@ -175,7 +173,49 @@ export default function Home({ searchParams }: HomeProps) {
   }
 
   return (
-    <div className="space-y-8 pb-16">
+    <div className="space-y-8 pb-16 relative">
+      {/* On-Site Embedded Player Modal */}
+      {activePlayerModel && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4">
+          <div className="relative w-full max-w-4xl bg-neutral-900 border border-purple-500/30 rounded-2xl overflow-hidden shadow-2xl flex flex-col">
+            <div className="flex items-center justify-between px-4 py-3 bg-neutral-950 border-b border-white/10">
+              <div className="flex items-center gap-2">
+                <span className="h-2.5 w-2.5 rounded-full bg-red-600 animate-pulse" />
+                <h3 className="text-sm font-bold text-white uppercase tracking-wider">
+                  {activePlayerModel.username || activePlayerModel.displayName} - Live Stream
+                </h3>
+              </div>
+              <button 
+                onClick={() => setActivePlayerModel(null)}
+                className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-neutral-400 hover:text-white transition"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            
+            <div className="relative aspect-video w-full bg-black">
+              {/* Internal Embedded Player Frame keeping user on domain */}
+              <iframe
+                src={`https://stripchat.com/embed/${activePlayerModel.username}?tourId=${stripcashUserId}&muted=false&autoplay=true`}
+                className="w-full h-full border-0"
+                allowFullScreen
+                allow="autoplay; encrypted-media"
+              />
+            </div>
+            
+            <div className="p-4 bg-neutral-950 flex items-center justify-between text-xs text-neutral-400 border-t border-white/10">
+              <span>Broadcasting live from Stripchat network via secure on-site integration</span>
+              <button
+                onClick={() => setActivePlayerModel(null)}
+                className="px-4 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-white font-semibold transition"
+              >
+                Close Player
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Source Selector Bar */}
       <div className="flex items-center justify-between border-b border-white/[0.08] pb-4">
         <div className="flex items-center gap-2">
@@ -238,7 +278,7 @@ export default function Home({ searchParams }: HomeProps) {
               Stripcash Verified Models Feed
             </h1>
             <p className="text-xs text-neutral-500">
-              Fetched dynamically via Stripcash API endpoint ({stripcashApiBase})
+              Click any model card to watch live directly on your domain via embedded stream player
             </p>
           </div>
           
@@ -249,30 +289,36 @@ export default function Home({ searchParams }: HomeProps) {
           ) : globalModels.length > 0 ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
               {globalModels.map((model: any, idx: number) => (
-                <div key={model.id || idx} className="bg-neutral-900 rounded-xl overflow-hidden border border-purple-500/20">
-                  <div className="relative aspect-video bg-neutral-950 flex items-center justify-center">
-                    {model.previewUrl || model.avatar ? (
-                      <img src={model.previewUrl || model.avatar} alt={model.username} className="w-full h-full object-cover" />
+                <div key={model.id || idx} className="bg-neutral-900 rounded-xl overflow-hidden border border-purple-500/20 flex flex-col">
+                  <div className="relative aspect-video bg-neutral-950 flex items-center justify-center overflow-hidden group">
+                    {model.previewUrl || model.avatar || model.imageUrl ? (
+                      <img src={model.previewUrl || model.avatar || model.imageUrl} alt={model.username} className="w-full h-full object-cover group-hover:scale-105 transition duration-300" />
                     ) : (
                       <span className="text-xs text-neutral-600">No Preview</span>
                     )}
                     <span className="absolute top-2 left-2 bg-red-600 text-xs px-2 py-0.5 rounded font-bold text-white animate-pulse">
                       LIVE
                     </span>
+                    <button
+                      onClick={() => setActivePlayerModel(model)}
+                      className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center gap-2 text-white font-bold text-xs uppercase tracking-wider"
+                    >
+                      <Play className="h-8 w-8 p-2 rounded-full bg-purple-600 text-white fill-white shadow-lg" />
+                    </button>
                   </div>
-                  <div className="p-3">
-                    <h4 className="text-white font-semibold">{model.username || model.displayName}</h4>
-                    <p className="text-xs text-neutral-400 truncate">{model.subject || "Live Interactive Stream"}</p>
-                    <div className="flex justify-between items-center mt-3 text-xs text-neutral-500">
+                  <div className="p-3 flex flex-col flex-1 justify-between">
+                    <div>
+                      <h4 className="text-white font-semibold">{model.username || model.displayName}</h4>
+                      <p className="text-xs text-neutral-400 truncate">{model.subject || "Interactive Live Stream"}</p>
+                    </div>
+                    <div className="flex justify-between items-center mt-3 pt-2 border-t border-white/5 text-xs text-neutral-500">
                       <span>👁 {model.viewersCount || model.usersCount || 0}</span>
-                      <a 
-                        href={`https://go.whitetrafsa.com/${stripcashUserId}?tour_id=${model.id || ''}`} 
-                        target="_blank" 
-                        rel="noopener noreferrer"
-                        className="bg-purple-600 hover:bg-purple-500 text-white px-3 py-1 rounded-full font-medium"
+                      <button 
+                        onClick={() => setActivePlayerModel(model)}
+                        className="bg-purple-600 hover:bg-purple-500 text-white px-3 py-1 rounded-lg font-medium transition flex items-center gap-1"
                       >
-                        Watch Live
-                      </a>
+                        <Play className="h-3 w-3 fill-current" /> Watch Live
+                      </button>
                     </div>
                   </div>
                 </div>
