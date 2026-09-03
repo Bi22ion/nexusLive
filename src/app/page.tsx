@@ -6,6 +6,11 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { FeaturedPkBattles } from "@/components/market/FeaturedPkBattles";
 import { StreamGrid } from "@/components/market/StreamGrid";
 import { Loader2, X, Globe, Users, Play } from "lucide-react";
+import {
+  buildApiFilterParams,
+  clientFilterModel,
+  type StripcashModel,
+} from "@/lib/modelFilters";
 
 interface HomeProps {
   searchParams: Promise<{
@@ -17,31 +22,30 @@ interface HomeProps {
 
 const CATEGORY_TABS = ["All", "Solo", "Couple", "BDSM", "VR Cams"] as const;
 
-function mapAgeToRange(value: string): [number, number] | null {
-  const v = value.toLowerCase();
-  if (v.includes("18")) return [18, 21];
-  if (v.includes("22") || v.includes("young")) return [22, 29];
-  if (v.includes("milf") || v.includes("mature")) return [30, 99];
-  return null;
-}
-
 export default function Home({ searchParams }: HomeProps) {
   const [category, setCategory] = React.useState<string | undefined>();
   const [filter, setFilter] = React.useState<string | undefined>();
   const [filterValue, setFilterValue] = React.useState<string | undefined>();
   const [liveStreams, setLiveStreams] = React.useState<any[]>([]);
-  const [globalModels, setGlobalModels] = React.useState<any[]>([]);
+  const [globalModels, setGlobalModels] = React.useState<StripcashModel[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [globalLoading, setGlobalLoading] = React.useState(false);
-  
-  // Set default view to "global" so Stripcash models load first upon opening the site
+
   const [feedSource, setFeedSource] = React.useState<"community" | "global">("global");
-  const [activePlayerModel, setActivePlayerModel] = React.useState<any | null>(null);
-  
+  const [activePlayerModel, setActivePlayerModel] = React.useState<StripcashModel | null>(null);
+
   const supabase = React.useMemo(() => createSupabaseBrowserClient(), []);
 
-  const stripcashUserId = process.env.NEXT_PUBLIC_STRIPCASH_USER_ID || "88ae5b1a0d76e320bc0a1675ba92a8c9b6876a5915da871ca89c9a3809f3b6";
-  const stripcashApiBase = process.env.NEXT_PUBLIC_STRIPCASH_API_BASE || "https://go.whitetrafsa.com/api";
+  const stripcashUserId =
+    process.env.NEXT_PUBLIC_STRIPCASH_USER_ID ||
+    "88ae5b1a0d76e320bc0a1675ba92a8c9b6876a5915da871ca89c9a3809f3b6";
+  const stripcashApiBase =
+    process.env.NEXT_PUBLIC_STRIPCASH_API_BASE || "https://go.whitetrafsa.com/api";
+
+  const activeFilter = React.useMemo(
+    () => ({ filter, value: filterValue, category }),
+    [filter, filterValue, category]
+  );
 
   React.useEffect(() => {
     searchParams.then((params) => {
@@ -51,26 +55,38 @@ export default function Home({ searchParams }: HomeProps) {
     });
   }, [searchParams]);
 
+  // Fetch Stripcash models, applying filter params to the API call
   React.useEffect(() => {
     async function fetchStripcashModels() {
       setGlobalLoading(true);
       try {
-        const res = await fetch(`${stripcashApiBase}/models?userId=${stripcashUserId}&limit=24`);
+        const apiParams = buildApiFilterParams(activeFilter);
+        const query = new URLSearchParams({
+          userId: stripcashUserId,
+          limit: "24",
+          ...apiParams,
+        });
+        const res = await fetch(`${stripcashApiBase}/models?${query.toString()}`);
         const data = await res.json();
+        let models: StripcashModel[] = [];
         if (data && data.models) {
-          setGlobalModels(data.models);
+          models = data.models;
         } else if (Array.isArray(data)) {
-          setGlobalModels(data);
+          models = data;
         }
+        // Client-side filter as fallback for attributes the API may not filter server-side
+        const filtered = models.filter((m) => clientFilterModel(m, activeFilter));
+        setGlobalModels(filtered.length > 0 ? filtered : models);
       } catch (err) {
         console.error("Failed to fetch Stripcash models:", err);
+        setGlobalModels([]);
       } finally {
         setGlobalLoading(false);
       }
     }
 
     fetchStripcashModels();
-  }, [stripcashApiBase, stripcashUserId]);
+  }, [stripcashApiBase, stripcashUserId, activeFilter]);
 
   const fetchLiveStreams = React.useCallback(async () => {
     if (!supabase) return;
@@ -130,7 +146,7 @@ export default function Home({ searchParams }: HomeProps) {
     const v = filterValue.toLowerCase();
 
     if (filter === "Age") {
-      const range = mapAgeToRange(filterValue);
+      const range = mapAgeToRangeLocal(filterValue);
       if (range && profile?.age != null) {
         const age = Number(profile.age);
         return age >= range[0] && age <= range[1];
@@ -160,6 +176,8 @@ export default function Home({ searchParams }: HomeProps) {
   const pkStreams = filteredStreams.filter((s) => s.is_pk === true) || [];
   const soloStreams = filteredStreams.filter((s) => s.is_pk !== true) || [];
 
+  const hasActiveFilter = !!(filter && filterValue) || !!category;
+
   if (loading) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
@@ -173,7 +191,6 @@ export default function Home({ searchParams }: HomeProps) {
 
   return (
     <div className="space-y-8 pb-16 relative">
-      {/* On-Site Embedded Player Modal keeping users on your domain */}
       {activePlayerModel && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4">
           <div className="relative w-full max-w-4xl bg-neutral-900 border border-purple-500/30 rounded-2xl overflow-hidden shadow-2xl flex flex-col">
@@ -184,14 +201,14 @@ export default function Home({ searchParams }: HomeProps) {
                   {activePlayerModel.username || activePlayerModel.displayName || activePlayerModel.name} - Live Stream
                 </h3>
               </div>
-              <button 
+              <button
                 onClick={() => setActivePlayerModel(null)}
                 className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-neutral-400 hover:text-white transition"
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
-            
+
             <div className="relative aspect-video w-full bg-black">
               <iframe
                 src={`https://stripchat.com/embed/${activePlayerModel.username || activePlayerModel.name}?tourId=${stripcashUserId}&muted=false&autoplay=true`}
@@ -200,7 +217,7 @@ export default function Home({ searchParams }: HomeProps) {
                 allow="autoplay; encrypted-media"
               />
             </div>
-            
+
             <div className="p-4 bg-neutral-950 flex items-center justify-between text-xs text-neutral-400 border-t border-white/10">
               <span>Broadcasting live from network via secure on-site integration</span>
               <button
@@ -268,27 +285,30 @@ export default function Home({ searchParams }: HomeProps) {
         </div>
       )}
 
-      {/* Render Stripcash Models Feed vs Community Stream Lists */}
       {feedSource === "global" ? (
         <section className="space-y-4">
           <div className="flex flex-col gap-1">
             <h1 className="text-lg font-bold uppercase tracking-tight text-white">
-              Stripcash Verified Models Feed
+              {hasActiveFilter
+                ? `${filterValue || category || ""} Models`
+                : "Stripcash Verified Models Feed"}
             </h1>
             <p className="text-xs text-neutral-500">
-              Click any model card to watch live instantly in an on-site player window
+              {hasActiveFilter
+                ? `Showing models matching your ${filterValue || category} filter`
+                : "Click any model card to watch live instantly in an on-site player window"}
             </p>
           </div>
-          
+
           {globalLoading ? (
             <div className="flex min-h-[400px] items-center justify-center">
               <Loader2 className="h-6 w-6 animate-spin text-purple-500" />
             </div>
           ) : globalModels.length > 0 ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-              {globalModels.map((model: any, idx: number) => {
+              {globalModels.map((model: StripcashModel, idx: number) => {
                 const modelUsername = model.username || model.displayName || model.name;
-                const modelPreview = model.previewUrl || model.avatar || model.imageUrl;
+                const modelPreview = model.previewUrl || model.avatar || model.imageUrl || model.thumbnailUrl;
 
                 return (
                   <div key={model.id || idx} className="bg-neutral-900 rounded-xl overflow-hidden border border-purple-500/20 flex flex-col">
@@ -315,7 +335,7 @@ export default function Home({ searchParams }: HomeProps) {
                       </div>
                       <div className="flex justify-between items-center mt-3 pt-2 border-t border-white/5 text-xs text-neutral-500">
                         <span>👁 {model.viewersCount || model.usersCount || 0}</span>
-                        <button 
+                        <button
                           onClick={() => setActivePlayerModel(model)}
                           className="bg-purple-600 hover:bg-purple-500 text-white px-3 py-1 rounded-lg font-medium transition flex items-center gap-1"
                         >
@@ -329,9 +349,23 @@ export default function Home({ searchParams }: HomeProps) {
             </div>
           ) : (
             <div className="rounded-2xl border border-dashed border-white/[0.08] bg-neutral-900/20 py-16 text-center">
+              <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-neutral-800">
+                <span className="h-2 w-2 animate-pulse rounded-full bg-neutral-600" />
+              </div>
               <p className="text-sm font-bold uppercase tracking-widest text-neutral-500">
-                No active Stripcash models available or check API response format.
+                {hasActiveFilter
+                  ? `No models currently online in ${filterValue || category}`
+                  : "No active Stripcash models available"}
               </p>
+              {hasActiveFilter && (
+                <Link
+                  href="/"
+                  className="mt-4 inline-flex items-center gap-1 rounded-full bg-white/5 px-4 py-1.5 text-xs font-semibold text-neutral-300 transition-colors hover:bg-white/10 hover:text-white"
+                >
+                  <X className="h-3 w-3" />
+                  Clear filter
+                </Link>
+              )}
             </div>
           )}
         </section>
@@ -401,4 +435,12 @@ export default function Home({ searchParams }: HomeProps) {
       )}
     </div>
   );
+}
+
+function mapAgeToRangeLocal(value: string): [number, number] | null {
+  const v = value.toLowerCase();
+  if (v.includes("18")) return [18, 21];
+  if (v.includes("22") || v.includes("young")) return [22, 29];
+  if (v.includes("milf") || v.includes("mature")) return [30, 99];
+  return null;
 }
