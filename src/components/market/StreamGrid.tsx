@@ -31,6 +31,7 @@ function mapRow(item: any): StreamCardModel {
     title: item.title ?? "Live now",
     description: item.description ?? null,
     previewUrl: item.cover_image ?? item.media_url ?? null,
+    mediaUrl: item.media_url ?? null,
     region: "Live",
     viewers: stableViewerCount(`${item.host}-${item.id ?? ""}`),
     isLive: item.status === "live",

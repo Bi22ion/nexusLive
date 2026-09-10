@@ -18,6 +18,7 @@ export type StreamCardModel = {
   title?: string | null;
   description?: string | null;
   previewUrl?: string | null;
+  mediaUrl?: string | null;
   region?: string | null;
   viewers: number;
   isLive: boolean;
@@ -193,7 +194,12 @@ export function StreamCard({ model }: { model: StreamCardModel }) {
             >
               <X className="h-5 w-5" />
             </button>
-            <LiveStreamViewer streamId={model.streamId} hostId={model.hostId} />
+            <LiveStreamViewer
+              streamId={model.streamId}
+              hostId={model.hostId}
+              mediaUrl={model.mediaUrl}
+              modelUsername={model.username}
+            />
           </motion.div>
         </div>
       )}

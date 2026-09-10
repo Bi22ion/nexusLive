@@ -156,6 +156,8 @@ export function ModelLiveSession({
               <LiveStreamViewer
                 streamId={stream.id}
                 hostId={stream.host}
+                mediaUrl={stream.media_url}
+                modelUsername={hostProfile.username}
                 className={locked ? "scale-105 blur-2xl brightness-50" : ""}
               />
 

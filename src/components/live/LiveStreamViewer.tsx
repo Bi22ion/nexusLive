@@ -1,8 +1,9 @@
 "use client";
 
 import * as React from "react";
+import Hls from "hls.js";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
-import { Loader2, WifiOff, Play, ExternalLink, Radio } from "lucide-react";
+import { Loader2, WifiOff, Play, ExternalLink, Radio, AlertCircle } from "lucide-react";
 
 type LiveStreamViewerProps = {
   streamId: string;
@@ -12,7 +13,34 @@ type LiveStreamViewerProps = {
   modelUsername?: string;
 };
 
-type ConnState = "connecting" | "live" | "reconnecting" | "offline" | "external";
+type ConnState = "connecting" | "live" | "reconnecting" | "offline" | "external" | "error";
+
+function isHlsUrl(url: string): boolean {
+  return url.toLowerCase().endsWith(".m3u8");
+}
+
+function isDirectVideoUrl(url: string): boolean {
+  const lower = url.toLowerCase();
+  return (
+    lower.endsWith(".mp4") ||
+    lower.endsWith(".webm") ||
+    lower.endsWith(".ogg") ||
+    lower.endsWith(".mov") ||
+    isHlsUrl(lower)
+  );
+}
+
+function isFrameBlockedUrl(url: string): boolean {
+  const lower = url.toLowerCase();
+  return (
+    lower.includes("stripchat") ||
+    lower.includes("whitetrafsa") ||
+    lower.includes("crakrevenue") ||
+    lower.includes("frtayb") ||
+    lower.includes("go.") ||
+    (lower.startsWith("http") && !isDirectVideoUrl(lower))
+  );
+}
 
 export function LiveStreamViewer({
   streamId,
@@ -23,6 +51,7 @@ export function LiveStreamViewer({
 }: LiveStreamViewerProps) {
   const supabase = React.useMemo(() => createSupabaseBrowserClient(), []);
   const videoRef = React.useRef<HTMLVideoElement>(null);
+  const hlsRef = React.useRef<Hls | null>(null);
   const pcRef = React.useRef<RTCPeerConnection | null>(null);
   const viewerIdRef = React.useRef<string>(
     typeof crypto !== "undefined" && "randomUUID" in crypto
@@ -35,20 +64,12 @@ export function LiveStreamViewer({
   const reconnectAttemptsRef = React.useRef(0);
   const activeRef = React.useRef(true);
 
-  // Check if mediaUrl is an external web page or tracking link that cannot be embedded directly
-  const isExternalStream = React.useMemo(() => {
-    if (!mediaUrl) return false;
-    const url = mediaUrl.toLowerCase();
-    return (
-      url.includes("stripchat") ||
-      url.includes("whitetrafsa") ||
-      url.includes("crakrevenue") ||
-      url.includes("go.") ||
-      (!url.endsWith(".mp4") &&
-        !url.endsWith(".m3u8") &&
-        !url.endsWith(".webm") &&
-        (url.startsWith("http://") || url.startsWith("https://")))
-    );
+  const streamKind = React.useMemo(() => {
+    if (!mediaUrl) return "webrtc" as const;
+    if (isFrameBlockedUrl(mediaUrl)) return "external" as const;
+    if (isHlsUrl(mediaUrl)) return "hls" as const;
+    if (isDirectVideoUrl(mediaUrl)) return "direct" as const;
+    return "external" as const;
   }, [mediaUrl]);
 
   const updateStatus = React.useCallback((next: ConnState) => {
@@ -57,26 +78,107 @@ export function LiveStreamViewer({
     setStatus(next);
   }, []);
 
+  const cleanupHls = React.useCallback(() => {
+    if (hlsRef.current) {
+      try {
+        hlsRef.current.destroy();
+      } catch {
+        /* best effort */
+      }
+      hlsRef.current = null;
+    }
+  }, []);
+
+  const handleVideoError = React.useCallback(() => {
+    if (!activeRef.current) return;
+    cleanupHls();
+    updateStatus("error");
+  }, [activeRef, cleanupHls, updateStatus]);
+
+  // Attach HLS.js or native src to the video element for playable URLs
+  const attachVideoSource = React.useCallback(
+    (url: string) => {
+      const video = videoRef.current;
+      if (!video) return;
+
+      cleanupHls();
+
+      if (isHlsUrl(url)) {
+        if (Hls.isSupported()) {
+          const hls = new Hls({ enableWorker: true, lowLatencyMode: true });
+          hlsRef.current = hls;
+          hls.loadSource(url);
+          hls.attachMedia(video);
+
+          hls.on(Hls.Events.MANIFEST_PARSED, () => {
+            video.play().then(() => updateStatus("live")).catch(() => updateStatus("live"));
+          });
+
+          hls.on(Hls.Events.ERROR, (_event, data) => {
+            if (!activeRef.current) return;
+            if (data.fatal) {
+              switch (data.type) {
+                case Hls.ErrorTypes.NETWORK_ERROR:
+                  if (reconnectAttemptsRef.current < 2) {
+                    reconnectAttemptsRef.current += 1;
+                    updateStatus("reconnecting");
+                    try {
+                      hls.startLoad();
+                    } catch {
+                      handleVideoError();
+                    }
+                  } else {
+                    handleVideoError();
+                  }
+                  break;
+                case Hls.ErrorTypes.MEDIA_ERROR:
+                  try {
+                    hls.recoverMediaError();
+                  } catch {
+                    handleVideoError();
+                  }
+                  break;
+                default:
+                  handleVideoError();
+                  break;
+              }
+            }
+          });
+        } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
+          video.src = url;
+          video.play().then(() => updateStatus("live")).catch(() => updateStatus("live"));
+        } else {
+          handleVideoError();
+        }
+      } else {
+        video.src = url;
+        video.play().then(() => updateStatus("live")).catch(() => updateStatus("live"));
+      }
+    },
+    [cleanupHls, handleVideoError, updateStatus]
+  );
+
   React.useEffect(() => {
     activeRef.current = true;
+    reconnectAttemptsRef.current = 0;
 
-    // Handle external network links via safe launch overlay
-    if (isExternalStream) {
+    // External / frame-blocked URLs: show launch overlay, never use iframe
+    if (streamKind === "external") {
       updateStatus("external");
       return;
     }
 
-    // Handle direct playable video files (.mp4, .m3u8, etc.)
-    if (mediaUrl && videoRef.current) {
-      videoRef.current.src = mediaUrl;
-      videoRef.current
-        .play()
-        .then(() => updateStatus("live"))
-        .catch(() => updateStatus("live"));
+    // HLS or direct video: attach to <video> with error handling
+    if (streamKind === "hls" || streamKind === "direct") {
+      updateStatus("connecting");
+      if (mediaUrl) {
+        // Defer to next tick so the <video> element is mounted
+        requestAnimationFrame(() => attachVideoSource(mediaUrl));
+      }
       return;
     }
 
-    // Handle custom WebRTC stream connection via Supabase
+    // WebRTC path: no mediaUrl, connect via Supabase realtime
     if (!supabase) {
       updateStatus("offline");
       return;
@@ -287,6 +389,7 @@ export function LiveStreamViewer({
       activeRef.current = false;
       if (initialTimeout) clearTimeout(initialTimeout);
       if (iceRetryTimer) clearTimeout(iceRetryTimer);
+      cleanupHls();
       try {
         pc.close();
       } catch {
@@ -296,14 +399,25 @@ export function LiveStreamViewer({
       channel.unsubscribe();
       supabase.removeChannel(channel);
     };
-  }, [hostId, isExternalStream, mediaUrl, streamId, supabase, updateStatus]);
+  }, [
+    attachVideoSource,
+    cleanupHls,
+    handleVideoError,
+    hostId,
+    mediaUrl,
+    streamId,
+    streamKind,
+    supabase,
+    updateStatus,
+  ]);
 
   const displayName = modelUsername || streamId || "Broadcaster";
+  const showVideoElement = streamKind === "hls" || streamKind === "direct" || streamKind === "webrtc";
 
   return (
     <div className={`relative h-full w-full bg-neutral-950 overflow-hidden ${className}`}>
-      {/* Native Video Stream Player */}
-      {!isExternalStream && (
+      {/* Native / HLS.js Video Stream Player */}
+      {showVideoElement && (
         <video
           ref={videoRef}
           className="h-full w-full object-cover"
@@ -311,11 +425,12 @@ export function LiveStreamViewer({
           playsInline
           muted
           loop
+          onError={handleVideoError}
           poster="https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=1200&auto=format&fit=crop&q=80"
         />
       )}
 
-      {/* External Broadcast Launcher Overlay (Fixes X-Frame-Options / 404s) */}
+      {/* External Broadcast Launcher Overlay (X-Frame-Options / 404 safe) */}
       {status === "external" && mediaUrl && (
         <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center bg-gradient-to-b from-neutral-900 via-neutral-950 to-black">
           <div className="relative z-10 flex flex-col items-center gap-4 max-w-sm">
@@ -352,7 +467,38 @@ export function LiveStreamViewer({
         </div>
       )}
 
-      {/* Connection States */}
+      {/* External overlay for WebRTC path with no media URL and no host offer */}
+      {status === "external" && !mediaUrl && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center bg-gradient-to-b from-neutral-900 via-neutral-950 to-black">
+          <div className="flex flex-col items-center gap-4 max-w-sm">
+            <div className="h-16 w-16 rounded-full bg-red-600/20 border border-red-500/40 flex items-center justify-center text-red-400 shadow-xl">
+              <Radio className="h-8 w-8 animate-pulse" />
+            </div>
+            <div>
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-red-500/10 border border-red-500/20 text-[10px] font-bold text-red-400 uppercase tracking-wider mb-2">
+                <Radio className="h-3 w-3 animate-pulse" /> Live
+              </div>
+              <h4 className="text-base font-bold text-white capitalize">
+                {displayName}
+              </h4>
+              <p className="text-xs text-neutral-400 mt-1">
+                This broadcast is hosted on an external platform.
+              </p>
+            </div>
+            <a
+              href={`https://stripchat.com/${displayName}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center justify-center gap-2 px-6 py-3 w-full rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold text-xs uppercase tracking-widest shadow-lg shadow-red-600/30 transition transform hover:scale-105 active:scale-95"
+            >
+              <span>Open Live Room</span>
+              <ExternalLink className="h-4 w-4" />
+            </a>
+          </div>
+        </div>
+      )}
+
+      {/* Connecting State */}
       {status === "connecting" && (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/70 text-neutral-300">
           <Loader2 className="h-7 w-7 animate-spin text-neutral-400" />
@@ -362,6 +508,7 @@ export function LiveStreamViewer({
         </div>
       )}
 
+      {/* Reconnecting State */}
       {status === "reconnecting" && (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/60 text-neutral-300">
           <Loader2 className="h-6 w-6 animate-spin text-amber-400" />
@@ -371,6 +518,33 @@ export function LiveStreamViewer({
         </div>
       )}
 
+      {/* Error State — stream URL failed to load (404, format issue, etc.) */}
+      {status === "error" && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/80 text-neutral-400 p-6 text-center">
+          <AlertCircle className="h-7 w-7 text-amber-500/70" />
+          <div>
+            <div className="text-sm font-semibold text-neutral-300">
+              Stream unavailable
+            </div>
+            <div className="mt-1 text-xs text-neutral-500 max-w-xs">
+              The live feed could not be loaded. The broadcaster may have gone offline or the stream URL is no longer valid.
+            </div>
+          </div>
+          {mediaUrl && (
+            <a
+              href={mediaUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-1 inline-flex items-center gap-2 rounded-xl bg-neutral-800 hover:bg-neutral-700 px-4 py-2 text-xs font-bold uppercase tracking-wider text-neutral-200 transition"
+            >
+              <ExternalLink className="h-3.5 w-3.5" />
+              Try external link
+            </a>
+          )}
+        </div>
+      )}
+
+      {/* Offline State */}
       {status === "offline" && (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/80 text-neutral-400">
           <WifiOff className="h-7 w-7 text-neutral-600" />
