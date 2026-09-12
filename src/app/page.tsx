@@ -11,6 +11,7 @@ import {
   clientFilterModel,
   type StripcashModel,
 } from "@/lib/modelFilters";
+import { extractModelsArray, buildAffiliateUrl } from "@/lib/stripcashUtils";
 import { StripcashModelPlayer } from "@/components/live/StripcashModelPlayer";
 
 interface HomeProps {
@@ -60,14 +61,10 @@ export default function Home({ searchParams }: HomeProps) {
         const res = await fetch(`/api/models?${query.toString()}`);
         if (!res.ok) throw new Error(`API returned ${res.status}`);
         const data = await res.json();
-        let models: StripcashModel[] = [];
-        if (data && data.models) {
-          models = data.models;
-        } else if (Array.isArray(data)) {
-          models = data;
-        }
-        // Client-side filter as fallback for attributes the API may not filter server-side
-        const filtered = models.filter((m) => clientFilterModel(m, activeFilter));
+        const models: StripcashModel[] = extractModelsArray(data) as StripcashModel[];
+        const filtered = Array.isArray(models)
+          ? models.filter((m) => clientFilterModel(m, activeFilter))
+          : [];
         setGlobalModels(filtered.length > 0 ? filtered : models);
       } catch (err) {
         console.error("Failed to fetch Stripcash models:", err);
@@ -186,10 +183,7 @@ export default function Home({ searchParams }: HomeProps) {
       {activePlayerModel && (
         <StripcashModelPlayer
           model={activePlayerModel}
-          affiliateUrl={
-            activePlayerModel.previewUrl ||
-            `https://stripchat.com/${activePlayerModel.username || activePlayerModel.name}`
-          }
+          affiliateUrl={buildAffiliateUrl(activePlayerModel)}
           onClose={() => setActivePlayerModel(null)}
         />
       )}

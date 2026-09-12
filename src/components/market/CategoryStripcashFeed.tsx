@@ -7,6 +7,7 @@ import {
   clientFilterModel,
   type StripcashModel,
 } from "@/lib/modelFilters";
+import { extractModelsArray, buildAffiliateUrl } from "@/lib/stripcashUtils";
 import { StripcashModelPlayer } from "@/components/live/StripcashModelPlayer";
 
 interface CategoryStripcashFeedProps {
@@ -30,31 +31,28 @@ export function CategoryStripcashFeed({
         const res = await fetch(`/api/models?${query.toString()}`);
         if (!res.ok) throw new Error(`API returned ${res.status}`);
         const data = await res.json();
-        let list: StripcashModel[] = [];
-        if (data && data.models) {
-          list = data.models;
-        } else if (Array.isArray(data)) {
-          list = data;
-        }
+        const list: StripcashModel[] = extractModelsArray(data) as StripcashModel[];
         // Client-side fallback filter
         const categorySlug = Object.keys(apiParams).length > 0
           ? apiParams.tags || apiParams.isVr || apiParams.isNew || apiParams.country || ""
           : "";
-        const filtered = list.filter((m) =>
-          clientFilterModel(m, {
-            category: categoryName.toLowerCase().includes("vr")
-              ? "vr"
-              : categoryName.toLowerCase().includes("new")
-                ? "new"
-                : categoryName.toLowerCase().includes("bdsm")
-                  ? "bdsm"
-                  : categoryName.toLowerCase().includes("ticket")
-                    ? "tickets"
-                    : categoryName.toLowerCase().includes("ukrainian")
-                      ? "ukrainian"
-                      : undefined,
-          })
-        );
+        const filtered = Array.isArray(list)
+          ? list.filter((m) =>
+              clientFilterModel(m, {
+                category: categoryName.toLowerCase().includes("vr")
+                  ? "vr"
+                  : categoryName.toLowerCase().includes("new")
+                    ? "new"
+                    : categoryName.toLowerCase().includes("bdsm")
+                      ? "bdsm"
+                      : categoryName.toLowerCase().includes("ticket")
+                        ? "tickets"
+                        : categoryName.toLowerCase().includes("ukrainian")
+                          ? "ukrainian"
+                          : undefined,
+              })
+            )
+          : [];
         setModels(filtered.length > 0 ? filtered : list);
       } catch (err) {
         console.error(`Failed to fetch ${categoryName} models:`, err);
@@ -73,10 +71,7 @@ export function CategoryStripcashFeed({
       {activePlayer && (
         <StripcashModelPlayer
           model={activePlayer}
-          affiliateUrl={
-            activePlayer.previewUrl ||
-            `https://stripchat.com/${activePlayer.username || activePlayer.name}`
-          }
+          affiliateUrl={buildAffiliateUrl(activePlayer)}
           onClose={() => setActivePlayer(null)}
         />
       )}
