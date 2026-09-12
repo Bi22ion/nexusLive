@@ -7,6 +7,7 @@ import {
   clientFilterModel,
   type StripcashModel,
 } from "@/lib/modelFilters";
+import { StripcashModelPlayer } from "@/components/live/StripcashModelPlayer";
 
 interface CategoryStripcashFeedProps {
   categoryName: string;
@@ -21,22 +22,13 @@ export function CategoryStripcashFeed({
   const [loading, setLoading] = React.useState(true);
   const [activePlayer, setActivePlayer] = React.useState<StripcashModel | null>(null);
 
-  const stripcashUserId =
-    process.env.NEXT_PUBLIC_STRIPCASH_USER_ID ||
-    "88ae5b1a0d76e320bc0a1675ba92a8c9b6876a5915da871ca89c9a3809f3b6";
-  const stripcashApiBase =
-    process.env.NEXT_PUBLIC_STRIPCASH_API_BASE || "https://go.whitetrafsa.com/api";
-
   React.useEffect(() => {
     async function fetchModels() {
       setLoading(true);
       try {
-        const query = new URLSearchParams({
-          userId: stripcashUserId,
-          limit: "24",
-          ...apiParams,
-        });
-        const res = await fetch(`${stripcashApiBase}/models?${query.toString()}`);
+        const query = new URLSearchParams({ limit: "24", ...apiParams });
+        const res = await fetch(`/api/models?${query.toString()}`);
+        if (!res.ok) throw new Error(`API returned ${res.status}`);
         const data = await res.json();
         let list: StripcashModel[] = [];
         if (data && data.models) {
@@ -73,47 +65,20 @@ export function CategoryStripcashFeed({
     }
 
     fetchModels();
-  }, [stripcashApiBase, stripcashUserId, apiParams, categoryName]);
+  }, [apiParams, categoryName]);
 
   return (
     <div className="space-y-4">
-      {/* Embedded Player Modal */}
+      {/* Player Modal — HLS video or safe affiliate launch overlay */}
       {activePlayer && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4">
-          <div className="relative w-full max-w-4xl bg-neutral-900 border border-purple-500/30 rounded-2xl overflow-hidden shadow-2xl flex flex-col">
-            <div className="flex items-center justify-between px-4 py-3 bg-neutral-950 border-b border-white/10">
-              <div className="flex items-center gap-2">
-                <span className="h-2.5 w-2.5 rounded-full bg-red-600 animate-pulse" />
-                <h3 className="text-sm font-bold text-white uppercase tracking-wider">
-                  {activePlayer.username || activePlayer.displayName || activePlayer.name} - Live Stream
-                </h3>
-              </div>
-              <button
-                onClick={() => setActivePlayer(null)}
-                className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-neutral-400 hover:text-white transition"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-            <div className="relative aspect-video w-full bg-black">
-              <iframe
-                src={`https://stripchat.com/embed/${activePlayer.username || activePlayer.name}?tourId=${stripcashUserId}&muted=false&autoplay=true`}
-                className="w-full h-full border-0"
-                allowFullScreen
-                allow="autoplay; encrypted-media"
-              />
-            </div>
-            <div className="p-4 bg-neutral-950 flex items-center justify-between text-xs text-neutral-400 border-t border-white/10">
-              <span>Broadcasting live from network via secure on-site integration</span>
-              <button
-                onClick={() => setActivePlayer(null)}
-                className="px-4 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-white font-semibold transition"
-              >
-                Close Player
-              </button>
-            </div>
-          </div>
-        </div>
+        <StripcashModelPlayer
+          model={activePlayer}
+          affiliateUrl={
+            activePlayer.previewUrl ||
+            `https://stripchat.com/${activePlayer.username || activePlayer.name}`
+          }
+          onClose={() => setActivePlayer(null)}
+        />
       )}
 
       <div className="flex flex-col gap-1">

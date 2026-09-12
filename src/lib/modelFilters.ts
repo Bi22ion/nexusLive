@@ -11,6 +11,12 @@ export interface StripcashModel {
   name?: string;
   subject?: string;
   previewUrl?: string;
+  streamUrl?: string;
+  hlsUrl?: string;
+  roomUrl?: string;
+  url?: string;
+  link?: string;
+  affiliateUrl?: string;
   avatar?: string;
   imageUrl?: string;
   thumbnailUrl?: string;

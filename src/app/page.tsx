@@ -11,6 +11,7 @@ import {
   clientFilterModel,
   type StripcashModel,
 } from "@/lib/modelFilters";
+import { StripcashModelPlayer } from "@/components/live/StripcashModelPlayer";
 
 interface HomeProps {
   searchParams: Promise<{
@@ -36,12 +37,6 @@ export default function Home({ searchParams }: HomeProps) {
 
   const supabase = React.useMemo(() => createSupabaseBrowserClient(), []);
 
-  const stripcashUserId =
-    process.env.NEXT_PUBLIC_STRIPCASH_USER_ID ||
-    "88ae5b1a0d76e320bc0a1675ba92a8c9b6876a5915da871ca89c9a3809f3b6";
-  const stripcashApiBase =
-    process.env.NEXT_PUBLIC_STRIPCASH_API_BASE || "https://go.whitetrafsa.com/api";
-
   const activeFilter = React.useMemo(
     () => ({ filter, value: filterValue, category }),
     [filter, filterValue, category]
@@ -55,18 +50,15 @@ export default function Home({ searchParams }: HomeProps) {
     });
   }, [searchParams]);
 
-  // Fetch Stripcash models, applying filter params to the API call
+  // Fetch Stripcash models via our server-side API route (keeps API key server-side, avoids CORS)
   React.useEffect(() => {
     async function fetchStripcashModels() {
       setGlobalLoading(true);
       try {
         const apiParams = buildApiFilterParams(activeFilter);
-        const query = new URLSearchParams({
-          userId: stripcashUserId,
-          limit: "24",
-          ...apiParams,
-        });
-        const res = await fetch(`${stripcashApiBase}/models?${query.toString()}`);
+        const query = new URLSearchParams({ limit: "24", ...apiParams });
+        const res = await fetch(`/api/models?${query.toString()}`);
+        if (!res.ok) throw new Error(`API returned ${res.status}`);
         const data = await res.json();
         let models: StripcashModel[] = [];
         if (data && data.models) {
@@ -86,7 +78,7 @@ export default function Home({ searchParams }: HomeProps) {
     }
 
     fetchStripcashModels();
-  }, [stripcashApiBase, stripcashUserId, activeFilter]);
+  }, [activeFilter]);
 
   const fetchLiveStreams = React.useCallback(async () => {
     if (!supabase) return;
@@ -192,46 +184,15 @@ export default function Home({ searchParams }: HomeProps) {
   return (
     <div className="space-y-8 pb-16 relative">
       {activePlayerModel && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4">
-          <div className="relative w-full max-w-4xl bg-neutral-900 border border-purple-500/30 rounded-2xl overflow-hidden shadow-2xl flex flex-col">
-            <div className="flex items-center justify-between px-4 py-3 bg-neutral-950 border-b border-white/10">
-              <div className="flex items-center gap-2">
-                <span className="h-2.5 w-2.5 rounded-full bg-red-600 animate-pulse" />
-                <h3 className="text-sm font-bold text-white uppercase tracking-wider">
-                  {activePlayerModel.username || activePlayerModel.displayName || activePlayerModel.name} - Live Stream
-                </h3>
-              </div>
-              <button
-                onClick={() => setActivePlayerModel(null)}
-                className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-neutral-400 hover:text-white transition"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-
-            <div className="relative aspect-video w-full bg-black">
-              <iframe
-                src={`https://stripchat.com/embed/${activePlayerModel.username || activePlayerModel.name}?tourId=${stripcashUserId}&muted=false&autoplay=true`}
-                className="w-full h-full border-0"
-                allowFullScreen
-                allow="autoplay; encrypted-media"
-              />
-            </div>
-
-            <div className="p-4 bg-neutral-950 flex items-center justify-between text-xs text-neutral-400 border-t border-white/10">
-              <span>Broadcasting live from network via secure on-site integration</span>
-              <button
-                onClick={() => setActivePlayerModel(null)}
-                className="px-4 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-white font-semibold transition"
-              >
-                Close Player
-              </button>
-            </div>
-          </div>
-        </div>
+        <StripcashModelPlayer
+          model={activePlayerModel}
+          affiliateUrl={
+            activePlayerModel.previewUrl ||
+            `https://stripchat.com/${activePlayerModel.username || activePlayerModel.name}`
+          }
+          onClose={() => setActivePlayerModel(null)}
+        />
       )}
-
-      {/* Source Selector Bar */}
       <div className="flex items-center justify-between border-b border-white/[0.08] pb-4">
         <div className="flex items-center gap-2">
           <button

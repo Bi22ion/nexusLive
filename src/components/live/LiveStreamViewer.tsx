@@ -486,7 +486,7 @@ export function LiveStreamViewer({
               </p>
             </div>
             <a
-              href={`https://stripchat.com/${displayName}`}
+              href={`https://stripchat.com/${displayName}?tourId=${process.env.NEXT_PUBLIC_STRIPCASH_USER_ID || ""}`}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center justify-center gap-2 px-6 py-3 w-full rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold text-xs uppercase tracking-widest shadow-lg shadow-red-600/30 transition transform hover:scale-105 active:scale-95"

@@ -1,11 +1,11 @@
 "use client";
 
-import React from "react";
-import { Zap, ExternalLink } from "lucide-react";
+import * as React from "react";
+import { Zap, ExternalLink, Radio } from "lucide-react";
 
 export default function CrakRevenueFeedViewer() {
-  const widgetUrl = 
-    process.env.NEXT_PUBLIC_CRAKREVENUE_WIDGET_URL || 
+  const widgetUrl =
+    process.env.NEXT_PUBLIC_CRAKREVENUE_WIDGET_URL ||
     "https://t.frtayb.com/421947/3664/0?target=widgets&po=6533&aff_sub5=SF_0060G000004lmDN";
 
   return (
@@ -22,7 +22,7 @@ export default function CrakRevenueFeedViewer() {
           </div>
         </div>
 
-        <a 
+        <a
           href={widgetUrl}
           target="_blank"
           rel="noopener noreferrer"
@@ -33,15 +33,28 @@ export default function CrakRevenueFeedViewer() {
         </a>
       </div>
 
-      {/* Iframe Feed Container */}
-      <div className="w-full min-h-[750px] bg-neutral-950 rounded-3xl overflow-hidden border border-white/10 shadow-2xl relative">
-        <iframe
-          src={widgetUrl}
-          title="Live Models Feed"
-          className="w-full h-full min-h-[750px] border-0"
-          sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
-          loading="lazy"
-        />
+      {/* Safe launch card — no iframe, avoids X-Frame-Options blocks */}
+      <div className="w-full min-h-[400px] bg-gradient-to-br from-neutral-900 via-neutral-950 to-black rounded-3xl overflow-hidden border border-white/10 shadow-2xl relative flex flex-col items-center justify-center p-8 text-center">
+        <div className="relative mb-4">
+          <div className="h-16 w-16 rounded-full bg-red-600/20 border border-red-500/40 flex items-center justify-center text-red-400 shadow-xl">
+            <Radio className="h-8 w-8 animate-pulse" />
+          </div>
+        </div>
+        <h3 className="text-lg font-bold text-white uppercase tracking-tight mb-2">
+          Live Cams Available
+        </h3>
+        <p className="text-xs text-neutral-400 max-w-md mb-6">
+          Browse thousands of live interactive models. Click below to open the full cam directory in a new tab.
+        </p>
+        <a
+          href={widgetUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold text-xs uppercase tracking-widest shadow-lg shadow-red-600/30 transition transform hover:scale-105 active:scale-95"
+        >
+          <span>Browse Live Models</span>
+          <ExternalLink className="h-4 w-4" />
+        </a>
       </div>
     </div>
   );
