@@ -65,7 +65,7 @@ export default function Home({ searchParams }: HomeProps) {
         const filtered = Array.isArray(models)
           ? models.filter((m) => clientFilterModel(m, activeFilter))
           : [];
-        setGlobalModels(filtered.length > 0 ? filtered : models);
+        setGlobalModels(filtered);
       } catch (err) {
         console.error("Failed to fetch Stripcash models:", err);
         setGlobalModels([]);

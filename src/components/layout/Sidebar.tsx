@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import {
   Home,
   Image as ImageIcon,
@@ -56,6 +56,10 @@ function formatCount(n?: number) {
 
 export function Sidebar() {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const activeFilter = searchParams.get("filter");
+  const activeValue = searchParams.get("value");
+  const activeCategory = pathname.startsWith("/category/") ? pathname.split("/").pop() : null;
   const supabase = React.useMemo(() => createSupabaseBrowserClient(), []);
   const [liveCount, setLiveCount] = React.useState(0);
   const [isLoggedIn, setIsLoggedIn] = React.useState(false);
@@ -130,7 +134,7 @@ export function Sidebar() {
               href={item.href}
               label={item.label}
               icon={item.icon}
-              active={pathname === item.href}
+              active={pathname === item.href || activeCategory === item.href.split("/").pop()}
             />
           ))}
         </SidebarSection>
@@ -146,6 +150,7 @@ export function Sidebar() {
                   label={label}
                   icon={group.icon}
                   dense
+                  active={activeFilter === group.title && activeValue === label}
                 />
               );
             })}

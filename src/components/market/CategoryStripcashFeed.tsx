@@ -53,7 +53,7 @@ export function CategoryStripcashFeed({
               })
             )
           : [];
-        setModels(filtered.length > 0 ? filtered : list);
+        setModels(filtered);
       } catch (err) {
         console.error(`Failed to fetch ${categoryName} models:`, err);
         setModels([]);

@@ -1,5 +1,62 @@
 import type { StripcashModel } from "@/lib/modelFilters";
 
+const STRIPCASH_API_BASE = process.env.STRIPCASH_API_BASE || "https://go.whitetrafsa.com/api";
+const STRIPCASH_USER_ID = process.env.STRIPCASH_USER_ID || "";
+const STRIPCASH_API_KEY = process.env.STRIPCASH_API_KEY;
+const STRIPCASH_DOMAIN = process.env.STRIPCASH_DOMAIN || "nexuslive-eight.vercel.app";
+
+export interface StripcashRequestOptions {
+  limit?: string;
+  offset?: string;
+  [key: string]: string | undefined;
+}
+
+function getStripcashHeaders() {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (STRIPCASH_API_KEY) {
+    headers.Authorization = `Bearer ${STRIPCASH_API_KEY}`;
+    headers["X-Api-Key"] = STRIPCASH_API_KEY;
+  }
+  if (STRIPCASH_DOMAIN) {
+    headers.Origin = `https://${STRIPCASH_DOMAIN}`;
+    headers.Referer = `https://${STRIPCASH_DOMAIN}/`;
+  }
+  return headers;
+}
+
+/** Fetches the live Stripcash feed server-side so credentials never reach the browser. */
+export async function fetchStripcashModels(options: StripcashRequestOptions = {}) {
+  const params = new URLSearchParams({ userId: STRIPCASH_USER_ID });
+  if (STRIPCASH_DOMAIN) params.set("domain", STRIPCASH_DOMAIN);
+  for (const [key, value] of Object.entries(options)) {
+    if (value) params.set(key, value);
+  }
+
+  const response = await fetch(`${STRIPCASH_API_BASE}/models/online?${params}`, {
+    headers: getStripcashHeaders(),
+    next: { revalidate: 60 },
+  });
+  if (!response.ok) throw new Error(`Stripcash API returned ${response.status}`);
+  return extractModelsArray(await response.json());
+}
+
+/** Fetches available feed attributes for category controls when supported by the API. */
+export async function fetchStripcashAttributes() {
+  const params = new URLSearchParams({ userId: STRIPCASH_USER_ID });
+  const response = await fetch(`${STRIPCASH_API_BASE}/models/attributes?${params}`, {
+    headers: getStripcashHeaders(),
+    next: { revalidate: 300 },
+  });
+  if (!response.ok) throw new Error(`Stripcash attributes API returned ${response.status}`);
+  return response.json() as Promise<Record<string, unknown>>;
+}
+
+export function getStripcashRequestOptions(searchParams: URLSearchParams): StripcashRequestOptions {
+  const allowed = ["filter", "value", "category", "limit", "offset", "ageRange", "ethnicity", "bodyType", "tags", "gender", "isVr", "isMobile", "isLovense", "isNew", "isHd", "sortBy"];
+  return Object.fromEntries(allowed.map((key) => [key, searchParams.get(key) || undefined]));
+}
+
+
 /**
  * Safely extracts an array of models from any API response shape.
  * Handles: bare array, {models: [...]}, {result: [...]}, {data: [...]},
