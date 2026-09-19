@@ -1,8 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { createBrowserClient } from "@supabase/ssr";
 import type { RealtimeChannel } from "@supabase/supabase-js";
+import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { 
   Camera, 
   Settings, 
@@ -53,10 +53,7 @@ export default function CreatorStudio() {
   const hostChannelRef = React.useRef<RealtimeChannel | null>(null);
   const peerConnectionsRef = React.useRef<Map<string, RTCPeerConnection>>(new Map());
 
-  const supabase = createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  );
+  const supabase = React.useMemo(() => createSupabaseBrowserClient(), []);
 
   // 1. INITIALIZE CAMERA PREVIEW
   React.useEffect(() => {
