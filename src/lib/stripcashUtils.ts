@@ -1,7 +1,9 @@
 import type { StripcashModel } from "@/lib/modelFilters";
 
 const STRIPCASH_API_BASE = process.env.STRIPCASH_API_BASE || "https://go.whitetrafsa.com/api";
-const STRIPCASH_USER_ID = process.env.STRIPCASH_USER_ID || "";
+const STRIPCASH_USER_ID =
+  process.env.STRIPCASH_USER_ID ||
+  "724d1086ec244c5a6586e3464ef86a997f4282651cb73c47223c7a31f3d122cb";
 const STRIPCASH_API_KEY = process.env.STRIPCASH_API_KEY;
 const STRIPCASH_DOMAIN = process.env.STRIPCASH_DOMAIN || "nexuslive-eight.vercel.app";
 
@@ -91,7 +93,8 @@ export function buildAffiliateUrl(model: StripcashModel): string {
     "https://go.whitetrafsa.com";
   const userId =
     process.env.NEXT_PUBLIC_STRIPCASH_USER_ID ||
-    "724d1086ec244c5a65863464ef86a3464ef86a3464ef86a3464ef86a3464ef86a";
+    process.env.STRIPCASH_USER_ID ||
+    "724d1086ec244c5a6586e3464ef86a997f4282651cb73c47223c7a31f3d122cb";
 
   const username = model.username || model.displayName || model.name || "";
   const url = new URL(trackingBase);
