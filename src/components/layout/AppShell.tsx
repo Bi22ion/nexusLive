@@ -140,7 +140,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         {/* Desktop sidebar */}
         <aside className="hidden w-56 shrink-0 border-r border-white/[0.06] lg:block">
           <div className="sticky top-14 h-[calc(100vh-3.5rem)]">
-            <Sidebar />
+            <React.Suspense fallback={<div className="h-full bg-black" aria-label="Loading sidebar" />}>\n              <Sidebar />\n            </React.Suspense>
           </div>
         </aside>
 
@@ -170,7 +170,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 >
                   <X className="h-5 w-5" />
                 </button>
-                <Sidebar />
+                <React.Suspense fallback={<div className="h-full bg-black" aria-label="Loading sidebar" />}>\n              <Sidebar />\n            </React.Suspense>
               </motion.aside>
             </>
           )}
